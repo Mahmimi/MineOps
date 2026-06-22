@@ -1,0 +1,64 @@
+# Minecraft runtime data
+**/data/
+**/data-backup/
+**/backups/
+**/world/
+**/world_nether/
+**/world_the_end/
+**/logs/
+**/cache/
+**/libraries/
+**/versions/
+**/plugins/
+*.log
+*.log.gz
+*.mca
+*.dat
+*.dat_old
+
+# Local MineOps state
+.local/
+.mineops/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Kubernetes and local cluster files
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+.kube/
+*.kube.yaml
+
+# Secrets and environment files
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+secrets.yaml
+secret.yaml
+*.key
+*.pem
+*.crt
+
+# Local development artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules/
+dist/
+build/
+coverage/
+*.tmp
+*.bak
