@@ -1,0 +1,14 @@
+kubeconfig_path        = "~/.kube/config"
+namespace              = "mineops"
+minecraft_storage_size = "20Gi"
+minecraft_memory       = "4G"
+minecraft_type         = "PAPER"
+minecraft_version      = "LATEST"
+minecraft_ops          = "Jiranuwat"
+minecraft_seed         = "5063885805507972583"
+minecraft_service_type = "LoadBalancer"
+
+# Credential-free validation defaults.
+# Set playit_replicas = 1 only when using a non-production Playit token.
+playit_replicas     = 0
+playit_secret_value = "replace-with-non-production-playit-secret"

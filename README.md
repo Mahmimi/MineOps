@@ -6,27 +6,28 @@ The project is migrating from a legacy Docker Compose deployment into a cleaner 
 
 ## Current Status
 
-MineOps V1 is currently a repository foundation and migration-safety phase.
+MineOps is in the Platform Stabilization phase before Phase 3.
 
 Implemented:
 
 - legacy Docker Compose assets preserved under `legacy/docker-compose/`
 - existing Minecraft world data preserved in place
 - existing backups preserved in place
-- k3d local cluster configuration skeleton
-- Terraform skeleton
-- platform Kubernetes directory structure
-- initial documentation
+- deterministic k3d local cluster configuration
+- Terraform-managed Minecraft runtime foundation
+- Terraform-managed placeholder Playit Secret
+- Playit Deployment disabled by default for credential-free validation
+- platform Kubernetes manifest references
+- runtime, stabilization, rebuild, and migration documentation
 - GitHub Actions foundations for Terraform format checks and markdown lint placeholder
 
 Not implemented yet:
 
-- Minecraft Kubernetes workload
-- Playit Kubernetes workload
 - Discord bot
 - MineOps controller
 - automated backup or restore jobs
 - deployment pipeline
+- scale-to-zero automation
 
 ## Repository Layout
 
@@ -34,15 +35,17 @@ Not implemented yet:
 MineOps/
 |-- .github/
 |   `-- workflows/              # CI foundations
-|-- docs/                       # architecture, migration, and operations docs
+|-- apps/
+|   `-- discord-bot/            # future ChatOps service
+|-- docs/                       # architecture, migration, operations, and reports
 |-- infra/
 |   |-- k3d/                    # local Kubernetes cluster configuration
-|   `-- terraform/              # Terraform foundation
+|   `-- terraform/              # Terraform runtime foundation
 |-- legacy/
 |   |-- docker-compose/         # preserved legacy Compose deployment
 |   `-- kubernetes/             # archived early Kubernetes manifests
 |-- platform/
-|   |-- kubernetes/             # future Kubernetes resources
+|   |-- kubernetes/             # Kubernetes resource references
 |   |-- helm/                   # future Helm charts or values
 |   `-- manifests/              # future raw/shared manifests
 |-- .gitignore
@@ -54,21 +57,50 @@ MineOps/
 
 `legacy/` keeps the original deployment history and data source safe during migration. The current Minecraft world and backups live here and should not be modified casually.
 
-`infra/k3d/` defines the local development Kubernetes cluster. The V1 config maps Minecraft port `25565` and prepares host-backed storage for future persistent volumes.
+`infra/k3d/` defines the local development Kubernetes cluster. The config exposes the Kubernetes API at `https://localhost:6550`, maps Minecraft port `25565`, and prepares host-backed storage.
 
-`infra/terraform/` contains the Terraform foundation. It currently defines provider configuration, variables, outputs, and placeholders only. Minecraft and Playit resources will be added later.
+`infra/terraform/` manages the `mineops` namespace, `minecraft-data` PVC, Minecraft Deployment, Minecraft Service, placeholder Playit Secret, and Playit Deployment.
 
-`platform/kubernetes/` is prepared for future Kubernetes resources grouped by component:
+`platform/kubernetes/` contains plain Kubernetes manifest references grouped by component:
 
 - `minecraft/`
 - `playit/`
 - `storage/`
+- `backup/`
+- `automation/`
 
-`platform/helm/` and `platform/manifests/` are reserved for future packaging and shared manifest work.
+`apps/discord-bot/` is reserved for the future ChatOps service.
 
-`docs/` contains the project architecture, migration notes, and operational guidance.
+`docs/` contains architecture, migration notes, operational guidance, and validation reports.
 
-`.github/workflows/` contains CI foundations. No deployment pipeline exists yet.
+## Local Cluster
+
+```bash
+New-Item -ItemType Directory -Force .\.local\k3d\storage
+$env:MINEOPS_STORAGE_PATH = (Resolve-Path .\.local\k3d\storage).Path
+k3d cluster create --config infra/k3d/local.yaml
+```
+
+Expected kubeconfig endpoint:
+
+```text
+https://localhost:6550
+```
+
+No manual kubeconfig editing should be required.
+
+## Terraform
+
+```bash
+cd infra/terraform
+terraform init
+terraform fmt -check -recursive
+terraform validate
+terraform plan
+terraform apply
+```
+
+Default validation does not require real Playit credentials. Playit is scaled to `0` replicas unless a local ignored override enables it with a non-production token.
 
 ## Data Safety
 
@@ -90,78 +122,36 @@ Before any future Kubernetes migration:
 4. Copy from the verified backup into Kubernetes-owned storage.
 5. Keep the legacy data and backups until restore has been tested.
 
-## Local Cluster
-
-The k3d cluster config lives at:
-
-```text
-infra/k3d/local.yaml
-```
-
-Planned create command:
-
-```bash
-k3d cluster create --config infra/k3d/local.yaml
-```
-
-The config is prepared for local development with:
-
-- one server node
-- one agent node
-- host port `25565` mapped for future Minecraft traffic
-- host-backed local-path storage under `.local/k3d/storage`
-
-## Terraform
-
-Terraform foundation lives at:
-
-```text
-infra/terraform/
-```
-
-Current intended check:
-
-```bash
-terraform fmt -check -recursive infra/terraform
-```
-
-Terraform state, plans, and local provider caches are ignored by Git.
-
 ## Kubernetes Strategy
 
-Minecraft should run as a single-writer workload with replicas constrained to `0` or `1`.
+Minecraft currently runs as a single-replica Deployment with `Recreate` strategy and a single RWO PVC. Keep replicas constrained to `0` or `1`.
 
-A future StatefulSet is the preferred default because Minecraft has stateful storage and benefits from stable identity. A Deployment can also work if replicas are strictly limited and the persistent volume is mounted by only one pod. The hard rule is that only one Minecraft server process may write to the world data at a time.
-
-## Scale To Zero
-
-MineOps is designed to support scale-to-zero operations in the future.
-
-The safe future flow is:
-
-1. Detect or request shutdown.
-2. Save the Minecraft world.
-3. Stop the server cleanly.
-4. Scale the workload to `0`.
-5. Start it again through an explicit operation or future ChatOps command.
-
-Automatic idle shutdown should wait until player detection, backup behavior, and graceful shutdown are reliable.
+The current recommendation is to keep Deployment for Phase 3 and revisit StatefulSet after backup/restore and controller workflows become more advanced.
 
 ## Future Expansion
 
 Planned future areas:
 
-- Minecraft Kubernetes workload
-- Playit tunnel deployment
-- persistent storage and backup jobs
 - Discord bot for ChatOps
-- MineOps controller with narrow Kubernetes RBAC
+- backup scheduler
+- restore workflow
+- non-production secret injection workflow
+- optional External Secrets, SOPS, or Sealed Secrets evaluation
 - Prometheus and Grafana observability
 - optional Ansible host bootstrap
-- CI checks for Terraform, Kubernetes manifests, Helm, and docs
 
 ## More Documentation
 
 - [Architecture](docs/architecture.md)
+- [Deployment](docs/deployment.md)
 - [Migration](docs/migration.md)
 - [Operations](docs/operations.md)
+- [PVC Migration](docs/pvc-migration.md)
+- [Platform Stabilization Report](docs/platform-stabilization-report.md)
+- [Environment Drift Report](docs/environment-drift-report.md)
+- [Rebuild Validation Report](docs/rebuild-validation-report.md)
+- [Rollback](docs/rollback.md)
+- [Runtime Validation Report](docs/runtime-validation-report.md)
+- [StatefulSet Evaluation](docs/statefulset-evaluation.md)
+- [Phase 3 Readiness](docs/phase-3-readiness-assessment.md)
+- [Validation](docs/validation.md)

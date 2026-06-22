@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecraft
+  namespace: mineops
+  labels:
+    app.kubernetes.io/name: minecraft
+    app.kubernetes.io/component: game-server
+    app.kubernetes.io/part-of: mineops
+    app.kubernetes.io/managed-by: terraform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: minecraft
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: minecraft
+        app.kubernetes.io/component: game-server
+        app.kubernetes.io/part-of: mineops
+        app.kubernetes.io/managed-by: terraform
+    spec:
+      containers:
+        - name: minecraft
+          image: itzg/minecraft-server
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 5Gi
+            limits:
+              cpu: 3000m
+              memory: 6Gi
+          env:
+            - name: EULA
+              value: "TRUE"
+            - name: TYPE
+              value: "PAPER"
+            - name: VERSION
+              value: "LATEST"
+            - name: MEMORY
+              value: "4G"
+            - name: ONLINE_MODE
+              value: "TRUE"
+            - name: DIFFICULTY
+              value: "normal"
+            - name: MODE
+              value: "survival"
+            - name: ENABLE_ROLLING_LOGS
+              value: "true"
+            - name: SEED
+              value: "5063885805507972583"
+            - name: OPS
+              value: "Jiranuwat"
+            - name: OVERRIDE_SERVER_PROPERTIES
+              value: "true"
+          volumeMounts:
+            - name: minecraft-data
+              mountPath: /data
+      volumes:
+        - name: minecraft-data
+          persistentVolumeClaim:
+            claimName: minecraft-data

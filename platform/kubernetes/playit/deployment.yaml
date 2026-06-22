@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: playit
+  namespace: mineops
+  labels:
+    app.kubernetes.io/name: playit
+    app.kubernetes.io/component: tunnel
+    app.kubernetes.io/part-of: mineops
+    app.kubernetes.io/managed-by: terraform
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: playit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: playit
+        app.kubernetes.io/component: tunnel
+        app.kubernetes.io/part-of: mineops
+        app.kubernetes.io/managed-by: terraform
+    spec:
+      containers:
+        - name: playit
+          image: ghcr.io/playit-cloud/playit-agent:0.17
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: playit-secret
+                  key: secret-key
