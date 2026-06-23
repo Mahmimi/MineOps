@@ -1,34 +1,94 @@
-# MineOps Architecture
+# Architecture
 
-MineOps is a ChatOps-driven Minecraft platform for a local Kubernetes homelab. V1 establishes the repository foundation and keeps the current Docker Compose deployment available as a preserved legacy source.
+MineOps runs a Minecraft platform on a local k3d Kubernetes cluster.
 
-## Target Shape
+## System View
 
 ```mermaid
 flowchart TD
-  Player[Players] --> Tunnel[Playit tunnel]
-  Tunnel --> Service[Minecraft Service]
-  Service --> Minecraft[Minecraft workload, replicas 0-1]
-  Minecraft --> Storage[(Persistent storage)]
-  Terraform[Terraform] --> Kubernetes[Kubernetes API]
-  K3d[k3d local cluster] --> Kubernetes
-  Kubernetes --> Minecraft
-  FutureBot[Future Discord bot] --> FutureController[Future MineOps controller]
-  FutureController --> Kubernetes
+  Player[Players] --> Playit[Playit Tunnel]
+  Playit --> MinecraftService[Minecraft Service]
+  MinecraftService --> Minecraft[Minecraft Deployment]
+  Minecraft --> WorldPVC[(minecraft-data PVC)]
+
+  BackupCron[Backup CronJob] --> Minecraft
+  BackupCron --> WorldPVC
+  BackupCron --> BackupHost[(Host Backups ./backups)]
+
+  Discord[Discord] --> Bot[Discord Bot Deployment]
+  Bot --> KubeAPI[Kubernetes API Read-Only]
+  Bot --> Query[Minecraft Query Service]
+  Query --> Minecraft
+
+  Terraform[Terraform] --> KubeAPI
+  K3d[k3d] --> KubeAPI
 ```
 
-## Repository Areas
+## Components
 
-- `legacy/` contains preserved historical deployments and data sources.
-- `infra/` contains local cluster and Terraform foundations.
-- `platform/` contains future Kubernetes, Helm, and manifest resources.
-- `docs/` contains operator and migration documentation.
-- `.github/workflows/` contains CI foundations.
+### k3d
 
-## Minecraft Workload Model
+`infra/k3d/local.yaml` defines the local Kubernetes cluster.
 
-Minecraft should be treated as a single-writer stateful service with replicas limited to `0` or `1`.
+It provides:
 
-A StatefulSet can be appropriate later because it gives stable identity and persistent volume ownership. A Deployment can also work if the PVC is explicitly single-writer and replicas are never greater than one. For MineOps V1, the key architectural rule is not the Kubernetes controller type; it is that exactly one Minecraft server process may mount and write the world data.
+- fixed Kubernetes API endpoint on `https://localhost:6550`
+- Minecraft port mapping on `25565`
+- local-path storage mount for PVC data
+- host backup mount from `${MINEOPS_BACKUP_HOST_PATH}` to `/backups`
 
-Default future recommendation: use a single-replica StatefulSet when implementing the real workload, but keep scale operations constrained to `0` or `1`.
+### Terraform
+
+`infra/terraform/` manages the main Kubernetes runtime:
+
+- namespace
+- Minecraft PVC
+- Minecraft Deployment and Service
+- Minecraft Query Service
+- Playit Secret shape and Deployment
+- backup ServiceAccount, RBAC, ConfigMap, and CronJob
+
+### Minecraft
+
+Minecraft runs as a single-replica Deployment with `Recreate` strategy and a single `ReadWriteOnce` PVC.
+
+The platform assumes exactly one Minecraft process writes world data at any time.
+
+### Playit
+
+Playit runs as a separate Deployment and receives its secret key from `playit-secret`.
+
+### Discord Bot
+
+The Discord bot runs as a separate Deployment under `apps/discord-bot`.
+
+It is read-only:
+
+- reads Kubernetes status through a namespace-scoped ServiceAccount
+- reads player information through the Minecraft Query Protocol
+- does not execute infrastructure actions
+- does not run Terraform or kubectl commands from Discord
+- does not mutate Minecraft state
+
+### Backups
+
+Backups run from `cronjob/minecraft-backup`.
+
+The backup flow:
+
+1. Broadcast in-game warning.
+2. Run `save-all`.
+3. Run `save-off`.
+4. Copy world/config data.
+5. Run `save-on`.
+6. Broadcast success or failure.
+
+Backups are stored under `/backups` inside the cluster node, mapped to repository root `./backups` on the host.
+
+## Security Boundaries
+
+- Real secrets are loaded from local `.env` into Kubernetes Secrets.
+- Secrets are not committed to Git.
+- The Discord bot has read-only Kubernetes RBAC.
+- The backup ServiceAccount has only the minimum permissions needed to locate the Minecraft pod and send console commands for backup consistency.
+- Backup automation is Kubernetes-managed, not Discord-triggered.

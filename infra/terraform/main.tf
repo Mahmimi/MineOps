@@ -9,6 +9,11 @@ locals {
     "app.kubernetes.io/component" = "game-server"
   })
 
+  minecraft_query_labels = merge(local.common_labels, {
+    "app.kubernetes.io/name"      = "minecraft-query"
+    "app.kubernetes.io/component" = "game-server-query"
+  })
+
   playit_labels = merge(local.common_labels, {
     "app.kubernetes.io/name"      = "playit"
     "app.kubernetes.io/component" = "tunnel"
@@ -82,6 +87,12 @@ resource "kubernetes_deployment_v1" "minecraft" {
             protocol       = "TCP"
           }
 
+          port {
+            name           = "query"
+            container_port = var.minecraft_query_port
+            protocol       = "UDP"
+          }
+
           resources {
             requests = {
               cpu    = var.minecraft_cpu_request
@@ -132,6 +143,21 @@ resource "kubernetes_deployment_v1" "minecraft" {
           env {
             name  = "ENABLE_ROLLING_LOGS"
             value = "true"
+          }
+
+          env {
+            name  = "CREATE_CONSOLE_IN_PIPE"
+            value = "true"
+          }
+
+          env {
+            name  = "ENABLE_QUERY"
+            value = tostring(var.minecraft_query_enabled)
+          }
+
+          env {
+            name  = "QUERY_PORT"
+            value = tostring(var.minecraft_query_port)
           }
 
           env {
@@ -191,6 +217,30 @@ resource "kubernetes_service_v1" "minecraft" {
   }
 }
 
+resource "kubernetes_service_v1" "minecraft_query" {
+  metadata {
+    name      = "minecraft-query"
+    namespace = kubernetes_namespace_v1.mineops.metadata[0].name
+
+    labels = local.minecraft_query_labels
+  }
+
+  spec {
+    type = "ClusterIP"
+
+    selector = {
+      "app.kubernetes.io/name" = "minecraft"
+    }
+
+    port {
+      name        = "query"
+      port        = var.minecraft_query_port
+      target_port = var.minecraft_query_port
+      protocol    = "UDP"
+    }
+  }
+}
+
 resource "kubernetes_secret_v1" "playit" {
   metadata {
     name      = var.playit_secret_name
@@ -203,6 +253,10 @@ resource "kubernetes_secret_v1" "playit" {
 
   data = {
     (var.playit_secret_key) = var.playit_secret_value
+  }
+
+  lifecycle {
+    ignore_changes = [data]
   }
 }
 

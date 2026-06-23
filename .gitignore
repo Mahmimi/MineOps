@@ -1,7 +1,6 @@
 # Minecraft runtime data
 **/data/
 **/data-backup/
-**/backups/
 **/world/
 **/world_nether/
 **/world_the_end/
@@ -15,6 +14,14 @@
 *.mca
 *.dat
 *.dat_old
+
+# Root backup skeleton
+/backups/*
+!/backups/.gitkeep
+
+# Other generated backup directories
+**/backups/*
+!/backups/.gitkeep
 
 # Local MineOps state
 .local/

@@ -1,45 +1,76 @@
-# MineOps Operations
+# Operations
 
-## Local Cluster
+## Check Platform Status
 
-The local cluster definition lives in `infra/k3d/local.yaml`.
-
-Planned command:
-
-```bash
-k3d cluster create --config infra/k3d/local.yaml
+```powershell
+kubectl get pods -n mineops
+kubectl get svc -n mineops
+kubectl get cronjob -n mineops
 ```
 
-The cluster maps host port `25565` for Minecraft traffic and maps `.local/k3d/storage` for persistent storage.
+## Minecraft Logs
+
+```powershell
+kubectl logs -n mineops deployment/minecraft
+```
+
+## Discord Bot Logs
+
+```powershell
+kubectl logs -n mineops deployment/discord-bot
+```
+
+## Backup Jobs
+
+List recent backup jobs:
+
+```powershell
+kubectl get jobs -n mineops
+```
+
+Create a manual backup from the CronJob:
+
+```powershell
+kubectl create job -n mineops mineops-backup-manual --from=cronjob/minecraft-backup
+kubectl wait -n mineops --for=condition=complete job/mineops-backup-manual --timeout=300s
+kubectl logs -n mineops job/mineops-backup-manual
+```
+
+## Runtime Secrets
+
+Create or update runtime Secrets from `.env`:
+
+```powershell
+.\scripts\bootstrap-secrets.ps1
+```
+
+Delete runtime Secrets:
+
+```powershell
+.\scripts\delete-secrets.ps1
+```
+
+After deleting Secrets, affected pods may fail until the Secrets are restored.
 
 ## Terraform
 
-Terraform foundation files live in `infra/terraform/`.
-
-Current checks:
-
-```bash
-terraform fmt -check -recursive infra/terraform
+```powershell
+cd infra\terraform
+terraform fmt
+terraform validate
+terraform plan
+terraform apply
 ```
-
-Phase 2 Terraform manages:
-
-- `mineops` namespace
-- `minecraft-data` PVC
-- `minecraft` Deployment
-- `minecraft` Service
-- `playit` Deployment
-
-Use `docs/deployment.md` for the full apply flow.
 
 ## Data Safety
 
-Do not commit live Minecraft world data, backups, kubeconfig files, Terraform state, or secrets.
+Do not commit:
 
-Do not run Kubernetes against the preserved legacy Compose data path. Migration should copy from a verified backup into Kubernetes-owned storage.
+- `.env`
+- Terraform state
+- kubeconfig files
+- Minecraft world data
+- backup contents
+- Discord or Playit tokens
 
-## Scale To Zero
-
-Scale-to-zero is not implemented in Phase 2.
-
-Future Minecraft operations may support replicas `0` and `1` only. Before scaling to zero, the platform must save and stop the server cleanly. Automatic idle shutdown should wait until player detection, backup behavior, and graceful shutdown are reliable.
+Backups are stored under repository root `./backups`, but backup contents are ignored by Git.

@@ -17,6 +17,10 @@ volumes:
     nodeFilters:
       - server:*
       - agent:*
+  - volume: ${MINEOPS_BACKUP_HOST_PATH}:/backups
+    nodeFilters:
+      - server:*
+      - agent:*
 options:
   k3s:
     extraArgs:

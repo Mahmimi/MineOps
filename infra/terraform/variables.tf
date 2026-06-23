@@ -17,7 +17,7 @@ variable "minecraft_image" {
 }
 
 variable "minecraft_replicas" {
-  description = "Minecraft replica count. Keep at 1 for Phase 2."
+  description = "Minecraft replica count. Keep at 1 for a single active server."
   type        = number
   default     = 1
 }
@@ -62,6 +62,18 @@ variable "minecraft_service_type" {
   description = "Service type for Minecraft traffic on k3d."
   type        = string
   default     = "LoadBalancer"
+}
+
+variable "minecraft_query_enabled" {
+  description = "Enable the Minecraft Query Protocol for read-only player queries."
+  type        = bool
+  default     = true
+}
+
+variable "minecraft_query_port" {
+  description = "UDP port used by the Minecraft Query Protocol."
+  type        = number
+  default     = 25565
 }
 
 variable "minecraft_cpu_request" {
@@ -141,4 +153,50 @@ variable "playit_memory_limit" {
   description = "Memory limit for the Playit container."
   type        = string
   default     = "256Mi"
+}
+
+variable "backup_enabled" {
+  description = "Enable the Minecraft backup CronJob schedule. When false, the CronJob exists but is suspended."
+  type        = bool
+  default     = true
+}
+
+variable "backup_schedule" {
+  description = "Cron expression for automatic Minecraft backups."
+  type        = string
+  default     = "*/30 * * * *"
+}
+
+variable "backup_mode" {
+  description = "Backup retention mode: replace, append, or append_with_limit."
+  type        = string
+  default     = "append_with_limit"
+
+  validation {
+    condition     = contains(["replace", "append", "append_with_limit"], var.backup_mode)
+    error_message = "backup_mode must be one of: replace, append, append_with_limit."
+  }
+}
+
+variable "backup_limit" {
+  description = "Maximum retained timestamped backups when backup_mode is append_with_limit."
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.backup_limit >= 1
+    error_message = "backup_limit must be at least 1."
+  }
+}
+
+variable "backup_host_path" {
+  description = "Host directory for backups. Relative paths are resolved by the local shell before k3d cluster creation and mounted into cluster nodes at /backups."
+  type        = string
+  default     = "./backups"
+}
+
+variable "backup_image" {
+  description = "Container image used by the backup CronJob. Must include kubectl and POSIX shell utilities."
+  type        = string
+  default     = "bitnami/kubectl:latest"
 }

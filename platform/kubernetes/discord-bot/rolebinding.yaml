@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: discord-bot-readonly
+  namespace: mineops
+  labels:
+    app.kubernetes.io/name: discord-bot
+    app.kubernetes.io/component: chatops
+    app.kubernetes.io/part-of: mineops
+    app.kubernetes.io/managed-by: manifest
+subjects:
+  - kind: ServiceAccount
+    name: discord-bot
+    namespace: mineops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: discord-bot-readonly
