@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 MineOps runs a Minecraft platform on a local k3d Kubernetes cluster.
 
@@ -6,6 +6,16 @@ MineOps runs a Minecraft platform on a local k3d Kubernetes cluster.
 
 ```mermaid
 flowchart TD
+  Operator[Operator] --> CLI[MineOps CLI]
+  CLI --> Docker[Docker]
+  CLI --> K3d[k3d]
+  CLI --> Terraform[Terraform]
+  CLI --> Kubectl[kubectl]
+
+  K3d --> KubeAPI[Kubernetes API]
+  Terraform --> KubeAPI
+  Kubectl --> KubeAPI
+
   Player[Players] --> Playit[Playit Tunnel]
   Playit --> MinecraftService[Minecraft Service]
   MinecraftService --> Minecraft[Minecraft Deployment]
@@ -16,79 +26,89 @@ flowchart TD
   BackupCron --> BackupHost[(Host Backups ./backups)]
 
   Discord[Discord] --> Bot[Discord Bot Deployment]
-  Bot --> KubeAPI[Kubernetes API Read-Only]
-  Bot --> Query[Minecraft Query Service]
+  Bot --> Monitoring[Monitoring Layer]
+  Monitoring --> KubeRead[Kubernetes API Read-Only]
+  Monitoring --> Query[Minecraft Query Service]
   Query --> Minecraft
 
-  Terraform[Terraform] --> KubeAPI
-  K3d[k3d] --> KubeAPI
+  Monitoring --> Alerting[Alerting Layer]
+  Alerting --> DiscordAlerts[Discord Alert Channel]
+  Alerting --> AlertPVC[(alert-history PVC)]
 ```
 
-## Components
+## Operator Layer
 
-### k3d
+`apps/mineops-cli` provides a single operator entrypoint:
 
-`infra/k3d/local.yaml` defines the local Kubernetes cluster.
+```powershell
+.\mineops.ps1 <command>
+```
 
-It provides:
+The CLI wraps Docker, k3d, Terraform, kubectl, backup, restore, status, logs, doctor, metrics, dashboard, events, and alerts workflows.
 
-- fixed Kubernetes API endpoint on `https://localhost:6550`
-- Minecraft port mapping on `25565`
-- local-path storage mount for PVC data
-- host backup mount from `${MINEOPS_BACKUP_HOST_PATH}` to `/backups`
+## Discord Bot
 
-### Terraform
+The Discord bot is read-only:
 
-`infra/terraform/` manages the main Kubernetes runtime:
-
-- namespace
-- Minecraft PVC
-- Minecraft Deployment and Service
-- Minecraft Query Service
-- Playit Secret shape and Deployment
-- backup ServiceAccount, RBAC, ConfigMap, and CronJob
-
-### Minecraft
-
-Minecraft runs as a single-replica Deployment with `Recreate` strategy and a single `ReadWriteOnce` PVC.
-
-The platform assumes exactly one Minecraft process writes world data at any time.
-
-### Playit
-
-Playit runs as a separate Deployment and receives its secret key from `playit-secret`.
-
-### Discord Bot
-
-The Discord bot runs as a separate Deployment under `apps/discord-bot`.
-
-It is read-only:
-
-- reads Kubernetes status through a namespace-scoped ServiceAccount
-- reads player information through the Minecraft Query Protocol
+- reads Kubernetes status through namespace-scoped RBAC
+- reads player information through Minecraft Query Protocol
+- sends Discord embeds for slash commands
+- evaluates alerts
+- writes alert history to its PVC
 - does not execute infrastructure actions
 - does not run Terraform or kubectl commands from Discord
 - does not mutate Minecraft state
 
-### Backups
+## Monitoring Layer
 
-Backups run from `cronjob/minecraft-backup`.
+The lightweight monitoring layer observes Kubernetes readiness, backup Job state, last backup age, backup duration, Minecraft query data, and cluster state.
 
-The backup flow:
+Current implementation:
 
-1. Broadcast in-game warning.
-2. Run `save-all`.
-3. Run `save-off`.
-4. Copy world/config data.
-5. Run `save-on`.
-6. Broadcast success or failure.
+- `MetricsProvider`
+- `KubernetesMetricsProvider`
 
-Backups are stored under `/backups` inside the cluster node, mapped to repository root `./backups` on the host.
+## Alerting Layer
+
+Alerting supports Discord delivery, durable history, maintenance state, and activity events.
+
+Current implementation:
+
+- `AlertProvider`
+- `DiscordAlertProvider`
+- `AlertHistoryStore`
+
+Operational data is persisted to the `alert-history` PVC mounted at:
+
+```text
+/app/data
+```
+
+Stored data:
+
+- `/app/data/alerts/alerts.jsonl`
+- `/app/data/events/events.jsonl`
+- `/app/data/maintenance/state.json`
+
+## Backups
+
+Backups run from `cronjob/minecraft-backup` and are stored under `/backups`, mapped to repository root `./backups` on the host.
+
+## Restore
+
+Restore remains a manual administrative operation through the CLI or `scripts/restore.ps1`.
+
+Restore is intentionally not exposed through Discord.
 
 ## Security Boundaries
 
 - Real secrets are loaded from local `.env` into Kubernetes Secrets.
 - Secrets are not committed to Git.
 - The Discord bot has read-only Kubernetes RBAC.
-- The backup ServiceAccount has only the minimum permissions needed to locate the Minecraft pod and send console commands for backup consistency.
 - Backup automation is Kubernetes-managed, not Discord-triggered.
+- Restore operations are manual operator procedures outside Discord.
+- No Discord command can run Terraform, kubectl, pod exec, or infrastructure mutation.
+
+## Phase 6 Extension Points
+
+Phase 6 can add Prometheus, Grafana, and Alertmanager-backed implementations behind the existing provider interfaces without changing the CLI or Discord command UX contract.

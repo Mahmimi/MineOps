@@ -1,4 +1,4 @@
-import * as k8s from '@kubernetes/client-node';
+﻿import * as k8s from '@kubernetes/client-node';
 
 function containerEnv(container, name) {
   return container?.env?.find((item) => item.name === name)?.value ?? null;
@@ -15,8 +15,37 @@ function formatDuration(startTime) {
   return `${hours}h ${minutes}m ${remainingSeconds}s`;
 }
 
+function formatDurationFromSeconds(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ago`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes} minutes ago`;
+  }
+
+  return 'less than a minute ago';
+}
+
+function formatCronInterval(schedule) {
+  const match = String(schedule).match(/^\*\/(\d+) \* \* \* \*$/);
+  if (match) {
+    const minutes = Number.parseInt(match[1], 10);
+    return minutes === 1 ? '1 minute' : `${minutes} minutes`;
+  }
+
+  return schedule;
+}
+
 function podReady(pod) {
   return pod.status?.conditions?.some((condition) => condition.type === 'Ready' && condition.status === 'True') ?? false;
+}
+
+function jobCondition(job, type) {
+  return job.status?.conditions?.some((condition) => condition.type === type && condition.status === 'True') ?? false;
 }
 
 export class KubernetesStatusProvider {
@@ -33,6 +62,7 @@ export class KubernetesStatusProvider {
 
     this.coreApi = this.kubeConfig.makeApiClient(k8s.CoreV1Api);
     this.appsApi = this.kubeConfig.makeApiClient(k8s.AppsV1Api);
+    this.batchApi = this.kubeConfig.makeApiClient(k8s.BatchV1Api);
   }
 
   async getMinecraftDeployment() {
@@ -57,6 +87,86 @@ export class KubernetesStatusProvider {
     });
   }
 
+  async listBackupJobs() {
+    const response = await this.batchApi.listNamespacedJob({
+      namespace: this.config.mineops.namespace,
+      labelSelector: this.config.mineops.backupLabelSelector,
+    });
+    return response.items ?? [];
+  }
+
+  async getBackupCronJob() {
+    return this.batchApi.readNamespacedCronJob({
+      namespace: this.config.mineops.namespace,
+      name: this.config.mineops.backupCronJobName,
+    });
+  }
+
+  async getBackupInfo() {
+    try {
+      const [cronJob, jobs] = await Promise.all([
+        this.getBackupCronJob(),
+        this.listBackupJobs(),
+      ]);
+
+      const completedJobs = jobs
+        .filter((job) => jobCondition(job, 'Complete'))
+        .map((job) => ({
+          name: job.metadata?.name ?? 'unknown',
+          startTime: job.status?.startTime ?? null,
+          completionTime: job.status?.completionTime ?? null,
+        }))
+        .filter((job) => job.completionTime)
+        .sort((a, b) => new Date(b.completionTime).getTime() - new Date(a.completionTime).getTime());
+
+      const latestJob = jobs
+        .map((job) => ({
+          name: job.metadata?.name ?? 'unknown',
+          startTime: job.status?.startTime ?? null,
+          completionTime: job.status?.completionTime ?? null,
+          failed: jobCondition(job, 'Failed'),
+          complete: jobCondition(job, 'Complete'),
+          failedCount: job.status?.failed ?? 0,
+        }))
+        .sort((a, b) => new Date(b.completionTime ?? b.startTime ?? 0).getTime() - new Date(a.completionTime ?? a.startTime ?? 0).getTime())[0] ?? null;
+
+      const container = cronJob.spec?.jobTemplate?.spec?.template?.spec?.containers?.find(
+        (item) => item.name === 'minecraft-backup',
+      );
+      const lastBackupAt = completedJobs[0]?.completionTime ?? null;
+      const ageSeconds = lastBackupAt
+        ? Math.max(0, Math.floor((Date.now() - new Date(lastBackupAt).getTime()) / 1000))
+        : null;
+
+      return {
+        available: true,
+        lastBackupAt,
+        lastBackupAge: ageSeconds === null ? null : formatDurationFromSeconds(ageSeconds),
+        stale: ageSeconds === null ? false : ageSeconds > 7200,
+        mode: containerEnv(container, 'BACKUP_MODE') ?? 'unknown',
+        schedule: cronJob.spec?.schedule ?? 'unknown',
+        interval: formatCronInterval(cronJob.spec?.schedule ?? 'unknown'),
+        latestJob,
+        lastDurationSeconds: completedJobs[0]?.startTime
+          ? Math.max(0, Math.round((new Date(completedJobs[0].completionTime).getTime() - new Date(completedJobs[0].startTime).getTime()) / 1000))
+          : null,
+      };
+    } catch (error) {
+      this.logger.warn('backup info unavailable', { error: error.message });
+      return {
+        available: false,
+        lastBackupAt: null,
+        lastBackupAge: null,
+        stale: false,
+        mode: 'unknown',
+        schedule: 'unknown',
+        interval: 'unknown',
+        latestJob: null,
+        lastDurationSeconds: null,
+      };
+    }
+  }
+
   async getStatus() {
     const [deployment, pods] = await Promise.all([
       this.getMinecraftDeployment(),
@@ -64,6 +174,7 @@ export class KubernetesStatusProvider {
     ]);
 
     const primaryPod = pods[0] ?? null;
+    const availableCondition = deployment.status?.conditions?.find((condition) => condition.type === 'Available');
     return {
       namespace: this.config.mineops.namespace,
       deployment: deployment.metadata?.name ?? this.config.mineops.minecraftDeploymentName,
@@ -71,6 +182,7 @@ export class KubernetesStatusProvider {
       readyReplicas: deployment.status?.readyReplicas ?? 0,
       availableReplicas: deployment.status?.availableReplicas ?? 0,
       running: (deployment.status?.readyReplicas ?? 0) > 0,
+      lastSeen: availableCondition?.lastTransitionTime ? formatDuration(availableCondition.lastTransitionTime) : null,
       pods: pods.map((pod) => ({
         name: pod.metadata?.name ?? 'unknown',
         phase: pod.status?.phase ?? 'Unknown',

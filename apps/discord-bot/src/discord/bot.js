@@ -1,5 +1,9 @@
-import { Client, Events, GatewayIntentBits, REST, Routes } from 'discord.js';
+﻿import { Client, Events, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { commandDefinitions, createCommandHandlers } from './commands.js';
+import { startAlertingService } from '../platform/alerting-service.js';
+import { AlertHistoryStore } from '../platform/alert-history-store.js';
+import { DiscordAlertProvider } from '../platform/alert-provider.js';
+import { KubernetesMetricsProvider } from '../platform/metrics-provider.js';
 
 async function registerCommands({ config, logger }) {
   if (!config.discord.registerCommands) {
@@ -18,13 +22,10 @@ async function registerCommands({ config, logger }) {
     : Routes.applicationCommands(config.discord.clientId);
 
   await rest.put(route, { body: commandDefinitions });
-  logger.info('discord slash commands registered', {
-    commandCount: commandDefinitions.length,
-    scope: config.discord.guildId ? 'guild' : 'global',
-  });
+  logger.info('discord slash commands registered', { commandCount: commandDefinitions.length, scope: config.discord.guildId ? 'guild' : 'global' });
 }
 
-export async function startDiscordBot({ config, logger, runtimeState, platformService }) {
+export async function startDiscordBot({ config, logger, runtimeState, platformService, stateStore }) {
   if (!config.discord.enabled) {
     logger.warn('discord gateway disabled because DISCORD_TOKEN is empty or placeholder');
     return null;
@@ -32,19 +33,26 @@ export async function startDiscordBot({ config, logger, runtimeState, platformSe
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   const handlers = createCommandHandlers({ platformService });
+  let alertingService = null;
 
   client.once(Events.ClientReady, async (readyClient) => {
     runtimeState.discordConnected = true;
-    logger.info('discord client ready', {
-      userTag: readyClient.user.tag,
-      userId: readyClient.user.id,
-    });
+    logger.info('discord client ready', { userTag: readyClient.user.tag, userId: readyClient.user.id });
 
     try {
       await registerCommands({ config, logger });
     } catch (error) {
       logger.error('discord command registration failed', { error: error.message });
     }
+
+    alertingService = startAlertingService({
+      config,
+      logger,
+      alertProvider: config.discord.alertChannelId ? new DiscordAlertProvider({ client, channelId: config.discord.alertChannelId }) : null,
+      metricsProvider: new KubernetesMetricsProvider({ platformService }),
+      historyStore: new AlertHistoryStore({ logger }),
+      stateStore,
+    });
   });
 
   client.on(Events.ShardDisconnect, () => {
@@ -61,27 +69,19 @@ export async function startDiscordBot({ config, logger, runtimeState, platformSe
     const startedAt = Date.now();
     try {
       await interaction.deferReply({ ephemeral: true });
-      const content = await handler(interaction);
-      await interaction.editReply({ content });
-      logger.info('discord command handled', {
-        command: interaction.commandName,
-        durationMs: Date.now() - startedAt,
-      });
+      const reply = await handler(interaction);
+      if (typeof reply === 'string') await interaction.editReply({ content: reply });
+      else await interaction.editReply(reply);
+      logger.info('discord command handled', { command: interaction.commandName, durationMs: Date.now() - startedAt });
     } catch (error) {
-      logger.error('discord command failed', {
-        command: interaction.commandName,
-        error: error.message,
-      });
-
+      logger.error('discord command failed', { command: interaction.commandName, error: error.message });
       const message = 'MineOps could not read the requested status. Check bot logs for details.';
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: message });
-      } else {
-        await interaction.reply({ content: message, ephemeral: true });
-      }
+      if (interaction.deferred || interaction.replied) await interaction.editReply({ content: message });
+      else await interaction.reply({ content: message, ephemeral: true });
     }
   });
 
+  client.stopMineOpsAlerting = () => { alertingService?.stop(); };
   await client.login(config.discord.token);
   logger.info('discord login requested');
   return client;

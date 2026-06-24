@@ -66,4 +66,5 @@ It cannot:
 - run Terraform
 - run kubectl
 - trigger backups manually
+- restore backups
 - change infrastructure

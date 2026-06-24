@@ -1,0 +1,16 @@
+﻿apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: alert-history
+  namespace: mineops
+  labels:
+    app.kubernetes.io/name: discord-bot
+    app.kubernetes.io/component: alert-history
+    app.kubernetes.io/part-of: mineops
+    app.kubernetes.io/managed-by: manifest
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,11 +1,16 @@
 export class MineOpsPlatformService {
-  constructor({ statusProvider, playerProvider }) {
+  constructor({ statusProvider, playerProvider, stateStore }) {
     this.statusProvider = statusProvider;
     this.playerProvider = playerProvider;
+    this.stateStore = stateStore;
   }
 
   async checkReadiness() {
     return this.statusProvider.getStatus();
+  }
+
+  getMaintenance() {
+    return this.stateStore?.getMaintenance?.() ?? { enabled: false };
   }
 
   async getStatus() {
@@ -14,11 +19,14 @@ export class MineOpsPlatformService {
       this.statusProvider.getServer(),
       this.playerProvider.getPlayers(),
     ]);
+    const backup = await this.statusProvider.getBackupInfo();
 
     return {
       ...status,
       server,
       players,
+      backup,
+      maintenance: this.getMaintenance(),
     };
   }
 
@@ -35,6 +43,7 @@ export class MineOpsPlatformService {
         minecraftRunning: false,
         namespace: status.namespace,
         source: 'minecraft-query-protocol',
+        maintenance: this.getMaintenance(),
       };
     }
 
@@ -43,10 +52,20 @@ export class MineOpsPlatformService {
       ...players,
       minecraftRunning: status.running,
       namespace: status.namespace,
+      maintenance: this.getMaintenance(),
     };
   }
 
   async getServer() {
-    return this.statusProvider.getServer();
+    const [server, backup] = await Promise.all([
+      this.statusProvider.getServer(),
+      this.statusProvider.getBackupInfo(),
+    ]);
+
+    return {
+      ...server,
+      backup,
+      maintenance: this.getMaintenance(),
+    };
   }
 }

@@ -1,0 +1,17 @@
+﻿{
+  "name": "@mineops/cli",
+  "version": "0.5.2",
+  "private": true,
+  "type": "module",
+  "description": "Operator CLI for the MineOps platform.",
+  "bin": {
+    "mineops": "src/index.js"
+  },
+  "scripts": {
+    "check": "node --check src/index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+

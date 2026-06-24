@@ -1,4 +1,4 @@
-apiVersion: apps/v1
+﻿apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: discord-bot
@@ -26,9 +26,10 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: discord-bot
-          image: mineops-discord-bot:phase3.5
+          image: mineops-discord-bot:phase5.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -58,6 +59,12 @@ spec:
                   name: discord-bot-secret
                   key: guild-id
                   optional: true
+            - name: DISCORD_ALERT_CHANNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: discord-bot-secret
+                  key: alert-channel-id
+                  optional: true
             - name: DISCORD_REGISTER_COMMANDS
               value: "true"
             - name: DISCORD_REQUIRED
@@ -78,6 +85,19 @@ spec:
               value: "25565"
             - name: MINECRAFT_QUERY_TIMEOUT_MS
               value: "2000"
+            - name: BACKUP_CRONJOB_NAME
+              value: minecraft-backup
+            - name: BACKUP_LABEL_SELECTOR
+              value: app.kubernetes.io/name=minecraft-backup
+            - name: MONITORING_ENABLED
+              value: "true"
+            - name: MONITORING_INTERVAL_MS
+              value: "60000"
+            - name: PVC_USAGE_WARNING_PERCENT
+              value: "80"
+          volumeMounts:
+            - name: alert-history
+              mountPath: /app/data
           resources:
             requests:
               cpu: 50m
@@ -106,3 +126,9 @@ spec:
             capabilities:
               drop:
                 - ALL
+      volumes:
+        - name: alert-history
+          persistentVolumeClaim:
+            claimName: alert-history
+
+

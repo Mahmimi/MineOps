@@ -1,8 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
-
-function yesNo(value) {
-  return value ? 'yes' : 'no';
-}
+import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 
 function titleCase(value) {
   if (!value) return 'Unknown';
@@ -13,122 +9,83 @@ function titleCase(value) {
     .join(' ');
 }
 
-function formatPlayerCount(players) {
-  if (!players?.available) {
-    return 'Unavailable';
-  }
-
+function playerCount(players) {
+  if (!players?.available) return 'Unavailable';
   return `${players.onlineCount ?? 0} / ${players.maxPlayers ?? '?'}`;
 }
 
-function formatStatusLabel(running) {
-  return running ? '🟢 Online' : '🔴 Offline';
+function embed(title, color) {
+  return new EmbedBuilder()
+    .setTitle(title)
+    .setColor(color)
+    .setTimestamp(new Date())
+    .setFooter({ text: 'MineOps' });
 }
 
-function formatStatus(status) {
+function statusEmbed(status) {
   const server = status.server ?? {};
-  const primaryPod = status.primaryPod ?? {};
+  const pod = status.primaryPod ?? {};
+  const backup = status.backup ?? {};
 
-  return [
-    '### MineOps Server Status',
-    '',
-    formatStatusLabel(status.running),
-    '',
-    '**Status**',
-    formatStatusLabel(status.running),
-    '',
-    '**Uptime**',
-    primaryPod.uptime ?? 'Not running',
-    '',
-    '**Players**',
-    formatPlayerCount(status.players),
-    '',
-    '**Version**',
-    server.version ?? 'Unknown',
-    '',
-    '**Game Mode**',
-    titleCase(server.mode),
-  ].join('\n');
-}
-
-function formatPlayers(players) {
-  if (!players.available) {
-    return [
-      '### Online Players',
-      '',
-      '⚪ Unavailable',
-      '',
-      '**Players Online**',
-      'Unavailable',
-      '',
-      'Player information is temporarily unavailable.',
-    ].join('\n');
+  if (!status.running) {
+    return {
+      embeds: [embed('🔴 MineOps Offline', 0xd64545)
+        .setDescription('Server is currently unavailable.')
+        .addFields({ name: 'Last Seen', value: status.lastSeen ?? 'Unknown', inline: false })],
+    };
   }
 
-  const playerLines = players.players.length === 0
-    ? ['No players online right now']
-    : players.players.map((player) => `• ${player}`);
-
-  return [
-    '### Online Players',
-    '',
-    formatPlayerCount(players),
-    '',
-    '**Players Online**',
-    formatPlayerCount(players),
-    '',
-    ...playerLines,
-  ].join('\n');
+  const healthLine = backup.stale ? '⚠️ Backup stale' : '✅ Healthy';
+  const maintenanceLine = status.maintenance?.enabled ? '\n\n🛠 Maintenance mode is enabled.' : '';
+  return {
+    embeds: [embed('🟢 MineOps Online', 0x2ecc71)
+      .setDescription(`${healthLine}${maintenanceLine}`)
+      .addFields(
+        { name: '⏱ Uptime', value: pod.uptime ?? 'Unknown', inline: true },
+        { name: '👥 Players', value: playerCount(status.players), inline: true },
+        { name: '📦 Last Backup', value: backup.lastBackupAge ?? 'Not available', inline: true },
+        { name: '🎮 Version', value: `${titleCase(server.serverType)} ${titleCase(server.version)}`, inline: true },
+      )],
+  };
 }
 
-function formatServer(server) {
-  return [
-    '### MineOps Server Info',
-    '',
-    `🧱 ${titleCase(server.serverType)}`,
-    '',
-    '**Type**',
-    titleCase(server.serverType),
-    '',
-    '**Version**',
-    server.version ?? 'Unknown',
-    '',
-    '**Memory**',
-    server.memory ?? 'Unknown',
-    '',
-    '**Mode**',
-    titleCase(server.mode),
-    '',
-    '**Difficulty**',
-    titleCase(server.difficulty),
-    '',
-    '**World**',
-    server.world.name,
-    '',
-    '**Join Address**',
-    'Use your Playit address',
-  ].join('\n');
+function playersEmbed(players) {
+  const title = players.available ? `👥 Online Players (${playerCount(players)})` : '👥 Online Players';
+  const description = !players.available
+    ? 'Player information is temporarily unavailable.'
+    : players.players.length === 0
+      ? 'No players online right now.'
+      : players.players.map((player) => `🟢 ${player}`).join('\n');
+  return { embeds: [embed(title, 0x3498db).setDescription(description)] };
+}
+
+function serverEmbed(server) {
+  const backup = server.backup ?? {};
+  return {
+    embeds: [embed('🧙 MineOps Server', 0x5865f2).addFields(
+      { name: '🛠 Type', value: titleCase(server.serverType), inline: true },
+      { name: '📦 Version', value: titleCase(server.version), inline: true },
+      { name: '💾 Memory', value: server.memory ?? 'Unknown', inline: true },
+      { name: '🌍 World', value: server.world?.name ?? 'world', inline: true },
+      { name: '⚔ Difficulty', value: titleCase(server.difficulty), inline: true },
+      { name: '🏕 Mode', value: titleCase(server.mode), inline: true },
+      { name: '🗄 Backup Mode', value: backup.mode ?? 'unknown', inline: true },
+      { name: '🕒 Backup Interval', value: backup.interval ?? 'unknown', inline: true },
+      { name: '🛠 Maintenance', value: server.maintenance?.enabled ? 'Enabled' : 'Off', inline: true },
+    )],
+  };
 }
 
 export const commandDefinitions = [
-  new SlashCommandBuilder()
-    .setName('status')
-    .setDescription('Show read-only MineOps Minecraft runtime status.')
-    .toJSON(),
-  new SlashCommandBuilder()
-    .setName('players')
-    .setDescription('Show read-only Minecraft player information if available.')
-    .toJSON(),
-  new SlashCommandBuilder()
-    .setName('server')
-    .setDescription('Show read-only Minecraft server configuration and endpoint information.')
-    .toJSON(),
+  new SlashCommandBuilder().setName('status').setDescription('Show MineOps server status.').toJSON(),
+  new SlashCommandBuilder().setName('players').setDescription('Show online Minecraft players.').toJSON(),
+  new SlashCommandBuilder().setName('server').setDescription('Show MineOps server information.').toJSON(),
 ];
 
 export function createCommandHandlers({ platformService }) {
   return {
-    status: async () => formatStatus(await platformService.getStatus()),
-    players: async () => formatPlayers(await platformService.getPlayers()),
-    server: async () => formatServer(await platformService.getServer()),
+    status: async () => statusEmbed(await platformService.getStatus()),
+    players: async () => playersEmbed(await platformService.getPlayers()),
+    server: async () => serverEmbed(await platformService.getServer()),
   };
 }

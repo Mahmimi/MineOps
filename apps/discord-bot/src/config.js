@@ -1,4 +1,4 @@
-const PLACEHOLDER_TOKEN = 'replace-with-discord-bot-token';
+﻿const PLACEHOLDER_TOKEN = 'replace-with-discord-bot-token';
 
 function boolFromEnv(value, defaultValue) {
   if (value === undefined || value === '') return defaultValue;
@@ -23,6 +23,7 @@ export function loadConfig(env = process.env) {
       tokenPlaceholder: PLACEHOLDER_TOKEN,
       clientId: env.DISCORD_CLIENT_ID ?? '',
       guildId: env.DISCORD_GUILD_ID ?? '',
+      alertChannelId: env.DISCORD_ALERT_CHANNEL_ID ?? '',
       registerCommands: boolFromEnv(env.DISCORD_REGISTER_COMMANDS, true),
       required: boolFromEnv(env.DISCORD_REQUIRED, false),
       enabled: discordToken !== '' && discordToken !== PLACEHOLDER_TOKEN,
@@ -33,11 +34,19 @@ export function loadConfig(env = process.env) {
       minecraftServiceName: env.MINECRAFT_SERVICE_NAME ?? 'minecraft',
       minecraftLabelSelector: env.MINECRAFT_LABEL_SELECTOR ?? 'app.kubernetes.io/name=minecraft',
       minecraftContainerName: env.MINECRAFT_CONTAINER_NAME ?? 'minecraft',
+      backupCronJobName: env.BACKUP_CRONJOB_NAME ?? 'minecraft-backup',
+      backupLabelSelector: env.BACKUP_LABEL_SELECTOR ?? 'app.kubernetes.io/name=minecraft-backup',
     },
     minecraft: {
       queryHost: env.MINECRAFT_QUERY_HOST ?? 'minecraft-query',
       queryPort: intFromEnv(env.MINECRAFT_QUERY_PORT, 25565),
       queryTimeoutMs: intFromEnv(env.MINECRAFT_QUERY_TIMEOUT_MS, 2000),
     },
+    monitoring: {
+      enabled: boolFromEnv(env.MONITORING_ENABLED, true),
+      intervalMs: intFromEnv(env.MONITORING_INTERVAL_MS, 60000),
+      pvcUsageWarningPercent: intFromEnv(env.PVC_USAGE_WARNING_PERCENT, 80),
+    },
   };
 }
+

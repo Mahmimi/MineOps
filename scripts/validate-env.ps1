@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$EnvPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ".env")
 )
 
@@ -43,6 +43,12 @@ $required = @(
   "PLAYIT_SECRET_KEY"
 )
 
+$optional = @(
+  "DISCORD_ALERT_CHANNEL_ID",
+  "MINEOPS_STORAGE_PATH",
+  "MINEOPS_BACKUP_HOST_PATH"
+)
+
 Write-Host "Validating MineOps local environment file: $EnvPath"
 
 $envValues = Read-DotEnv -Path $EnvPath
@@ -52,6 +58,14 @@ foreach ($name in $required) {
   if (-not $envValues.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($envValues[$name])) {
     Write-Host "[MISSING] $name"
     $missing += $name
+  } else {
+    Write-Host "[OK]      $name"
+  }
+}
+
+foreach ($name in $optional) {
+  if (-not $envValues.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($envValues[$name])) {
+    Write-Host "[OPTIONAL] $name"
   } else {
     Write-Host "[OK]      $name"
   }

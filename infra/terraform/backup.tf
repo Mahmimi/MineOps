@@ -75,6 +75,14 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
         printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
       }
 
+      kube() {
+        kubectl \
+          --server="https://kubernetes.default.svc" \
+          --certificate-authority="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt" \
+          --token="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+          "$@"
+      }
+
       require_mode() {
         case "$BACKUP_MODE" in
           replace|append|append_with_limit) ;;
@@ -83,7 +91,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       }
 
       find_minecraft_pod() {
-        kubectl --request-timeout="$KUBECTL_REQUEST_TIMEOUT" get pods \
+        kube --request-timeout="$KUBECTL_REQUEST_TIMEOUT" get pods \
           -n "$NAMESPACE" \
           -l "$MINECRAFT_LABEL_SELECTOR" \
           -o jsonpath='{.items[0].metadata.name}'
@@ -92,7 +100,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       mc_command() {
         command="$1"
         log "minecraft command: $command"
-        kubectl --request-timeout="$KUBECTL_REQUEST_TIMEOUT" exec -n "$NAMESPACE" "$MINECRAFT_POD" -c "$MINECRAFT_CONTAINER" -- gosu minecraft mc-send-to-console "$command"
+        kube --request-timeout="$KUBECTL_REQUEST_TIMEOUT" exec -n "$NAMESPACE" "$MINECRAFT_POD" -c "$MINECRAFT_CONTAINER" -- gosu minecraft mc-send-to-console "$command"
       }
 
       copy_world_data() {

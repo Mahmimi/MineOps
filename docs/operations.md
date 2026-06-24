@@ -36,6 +36,28 @@ kubectl wait -n mineops --for=condition=complete job/mineops-backup-manual --tim
 kubectl logs -n mineops job/mineops-backup-manual
 ```
 
+## Restore
+
+Validate the latest backup:
+
+```powershell
+.\scripts\validate-backup.ps1 latest
+```
+
+Restore the latest backup:
+
+```powershell
+.\scripts\restore.ps1 latest
+```
+
+Restore a specific backup:
+
+```powershell
+.\scripts\restore.ps1 2026-06-23_18-30-00
+```
+
+Restore is manual and intentionally not available through Discord.
+
 ## Runtime Secrets
 
 Create or update runtime Secrets from `.env`:

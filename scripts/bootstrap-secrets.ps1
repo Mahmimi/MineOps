@@ -1,4 +1,4 @@
-param(
+﻿param(
   [string]$EnvPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ".env"),
   [string]$Namespace = "mineops"
 )
@@ -59,6 +59,7 @@ $envValues = Read-DotEnv -Path $EnvPath
 $discordToken = Require-EnvValue -Values $envValues -Name "DISCORD_TOKEN"
 $discordClientId = Require-EnvValue -Values $envValues -Name "DISCORD_CLIENT_ID"
 $discordGuildId = Require-EnvValue -Values $envValues -Name "DISCORD_GUILD_ID"
+$discordAlertChannelId = if ($envValues.ContainsKey("DISCORD_ALERT_CHANNEL_ID")) { $envValues["DISCORD_ALERT_CHANNEL_ID"] } else { "" }
 $playitSecretKey = Require-EnvValue -Values $envValues -Name "PLAYIT_SECRET_KEY"
 
 Write-Host "Bootstrapping MineOps runtime Secrets in namespace '$Namespace'."
@@ -69,6 +70,7 @@ kubectl create secret generic discord-bot-secret `
   --from-literal=token="$discordToken" `
   --from-literal=client-id="$discordClientId" `
   --from-literal=guild-id="$discordGuildId" `
+  --from-literal=alert-channel-id="$discordAlertChannelId" `
   --dry-run=client -o yaml | kubectl apply -f -
 
 kubectl create secret generic playit-secret `
