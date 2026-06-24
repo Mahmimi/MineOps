@@ -107,9 +107,9 @@ variable "playit_image" {
 }
 
 variable "playit_replicas" {
-  description = "Playit replica count. Default is 0 so clean-room validation does not require real credentials."
+  description = "Playit replica count for the tunnel agent."
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "playit_secret_name" {
@@ -125,7 +125,7 @@ variable "playit_secret_key" {
 }
 
 variable "playit_secret_value" {
-  description = "Playit secret value. Keep the default placeholder for credential-free validation; override only with a non-production token."
+  description = "Playit secret value. MineOps CLI and scripts inject the real value from .env during normal installs."
   type        = string
   default     = "replace-with-non-production-playit-secret"
   sensitive   = true

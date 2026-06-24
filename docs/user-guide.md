@@ -15,6 +15,7 @@ The Discord `/server` command also shows:
 - difficulty
 - world name
 - join address guidance
+- Playit tunnel health
 
 ## Discord Commands
 
@@ -27,6 +28,7 @@ Shows a friendly server dashboard:
 - players online
 - Minecraft version
 - game mode
+- Playit public join readiness
 
 ### `/players`
 
@@ -39,6 +41,12 @@ Shows:
 ### `/server`
 
 Shows general server information and the join-address note.
+
+### `/playit`
+
+Shows whether the Playit tunnel is ready for public joins.
+
+If it says the agent is ready but Minecraft has no endpoints, the server is stopped or not ready yet.
 
 ## Backup Warnings
 
@@ -53,15 +61,14 @@ Players will see messages before backup starts:
 
 When the backup finishes, players will see a success or failure message.
 
-## What The Discord Bot Cannot Do
+## What The Discord Bot Can And Cannot Do
 
-The bot is read-only.
+Anyone can use `/start_server` to bring Minecraft online.
+
+Only MineOps admins can use `/stop_server` and `/restart_server`.
 
 It cannot:
 
-- start the server
-- stop the server
-- restart the server
 - run Minecraft commands
 - run Terraform
 - run kubectl

@@ -46,7 +46,9 @@ $required = @(
 $optional = @(
   "DISCORD_ALERT_CHANNEL_ID",
   "MINEOPS_STORAGE_PATH",
-  "MINEOPS_BACKUP_HOST_PATH"
+  "MINEOPS_BACKUP_HOST_PATH",
+  "IDLE_SHUTDOWN_ENABLED",
+  "IDLE_SHUTDOWN_MINUTES"
 )
 
 Write-Host "Validating MineOps local environment file: $EnvPath"
@@ -77,3 +79,10 @@ if ($missing.Count -gt 0) {
 }
 
 Write-Host "MineOps environment validation passed."
+
+$adminConfigPath = Join-Path (Split-Path -Parent $PSScriptRoot) "mineops-admins.json"
+if (Test-Path -LiteralPath $adminConfigPath) {
+  Write-Host "[OK]      mineops-admins.json"
+} else {
+  Write-Host "[OPTIONAL] mineops-admins.json"
+}

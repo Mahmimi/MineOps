@@ -103,6 +103,37 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
         kube --request-timeout="$KUBECTL_REQUEST_TIMEOUT" exec -n "$NAMESPACE" "$MINECRAFT_POD" -c "$MINECRAFT_CONTAINER" -- gosu minecraft mc-send-to-console "$command"
       }
 
+      mc_broadcast() {
+        command="$1"
+        attempt=1
+        while [ "$attempt" -le 3 ]; do
+          if mc_command "say $command"; then
+            return 0
+          fi
+          log "broadcast retry $attempt failed"
+          attempt=$((attempt + 1))
+          sleep 5
+        done
+        return 1
+      }
+
+      wait_for_stable_minecraft() {
+        start_time="$(kube --request-timeout="$KUBECTL_REQUEST_TIMEOUT" get pod -n "$NAMESPACE" "$MINECRAFT_POD" -o jsonpath='{.status.startTime}')"
+        if [ -z "$start_time" ]; then
+          return 0
+        fi
+        start_epoch="$(date -d "$start_time" +%s 2>/dev/null || true)"
+        now_epoch="$(date -u +%s)"
+        if [ -n "$start_epoch" ]; then
+          age=$((now_epoch - start_epoch))
+          if [ "$age" -lt 90 ]; then
+            sleep_for=$((90 - age))
+            log "minecraft pod is still stabilizing; waiting $${sleep_for}s before backup announcements"
+            sleep "$sleep_for"
+          fi
+        fi
+      }
+
       copy_world_data() {
         source_path="$1"
         target_path="$2"
@@ -143,9 +174,9 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
         if [ -n "$MINECRAFT_POD" ]; then
           mc_command "save-on" || true
           if [ "$broadcast_result" = "success" ]; then
-            mc_command "say [MineOps] Backup completed successfully." || true
+            mc_broadcast "[MineOps] Backup completed successfully." || true
           else
-            mc_command "say [MineOps] Backup failed. Check server logs." || true
+            mc_broadcast "[MineOps] Backup failed. Check server logs." || true
           fi
         fi
       }
@@ -161,9 +192,11 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
 
       trap cleanup EXIT
 
-      mc_command "say [MineOps] Automatic backup will start in 30 seconds. A short lag spike may occur during backup."
+      wait_for_stable_minecraft
+
+      mc_broadcast "[MineOps] Automatic backup will start in 30 seconds. Temporary lag may occur."
       sleep 25
-      mc_command "say [MineOps] Backup starting in 5 seconds..."
+      mc_broadcast "[MineOps] Backup begins in 5 seconds."
       sleep 5
 
       mc_command "save-all"
@@ -209,8 +242,8 @@ resource "kubernetes_cron_job_v1" "minecraft_backup" {
   }
 
   spec {
-    schedule                      = var.backup_schedule
-    suspend                       = !var.backup_enabled
+    schedule                      = local.cfg_backup_schedule
+    suspend                       = !local.cfg_backup_enabled
     concurrency_policy            = "Forbid"
     successful_jobs_history_limit = 3
     failed_jobs_history_limit     = 3
@@ -289,12 +322,12 @@ resource "kubernetes_cron_job_v1" "minecraft_backup" {
 
               env {
                 name  = "BACKUP_MODE"
-                value = var.backup_mode
+                value = local.cfg_backup_mode
               }
 
               env {
                 name  = "BACKUP_LIMIT"
-                value = tostring(var.backup_limit)
+                value = tostring(local.cfg_backup_limit)
               }
 
               env {

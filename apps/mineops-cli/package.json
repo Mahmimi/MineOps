@@ -1,6 +1,6 @@
 ﻿{
   "name": "@mineops/cli",
-  "version": "0.5.2",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Operator CLI for the MineOps platform.",

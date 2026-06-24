@@ -29,7 +29,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: discord-bot
-          image: mineops-discord-bot:phase5.2
+          image: mineops-discord-bot:v1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -85,6 +85,16 @@ spec:
               value: "25565"
             - name: MINECRAFT_QUERY_TIMEOUT_MS
               value: "2000"
+            - name: PLAYIT_DEPLOYMENT_NAME
+              value: playit
+            - name: PLAYIT_LABEL_SELECTOR
+              value: app.kubernetes.io/name=playit
+            - name: PLAYIT_JOIN_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: mineops-runtime-config
+                  key: PLAYIT_JOIN_ADDRESS
+                  optional: true
             - name: BACKUP_CRONJOB_NAME
               value: minecraft-backup
             - name: BACKUP_LABEL_SELECTOR
@@ -95,9 +105,28 @@ spec:
               value: "60000"
             - name: PVC_USAGE_WARNING_PERCENT
               value: "80"
+            - name: MINEOPS_ADMIN_CONFIG_PATH
+              value: /app/config/mineops-admins.json
+            - name: IDLE_SHUTDOWN_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: mineops-runtime-config
+                  key: IDLE_SHUTDOWN_ENABLED
+                  optional: true
+            - name: IDLE_SHUTDOWN_MINUTES
+              valueFrom:
+                configMapKeyRef:
+                  name: mineops-runtime-config
+                  key: IDLE_SHUTDOWN_MINUTES
+                  optional: true
+            - name: LIFECYCLE_INTERVAL_MS
+              value: "60000"
           volumeMounts:
             - name: alert-history
               mountPath: /app/data
+            - name: admin-config
+              mountPath: /app/config
+              readOnly: true
           resources:
             requests:
               cpu: 50m
@@ -130,5 +159,9 @@ spec:
         - name: alert-history
           persistentVolumeClaim:
             claimName: alert-history
+        - name: admin-config
+          configMap:
+            name: mineops-admins
+            optional: true
 
 

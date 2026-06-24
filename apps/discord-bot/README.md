@@ -1,14 +1,15 @@
 # MineOps Discord Bot
 
-This service is the read-only Discord ChatOps integration for MineOps.
+This service is the Discord ChatOps integration for MineOps.
 
-The bot does not implement infrastructure mutation. It reads Minecraft status from the Kubernetes API through a minimal ServiceAccount and reads player information through the Minecraft Query Protocol.
+The bot reads Minecraft and Playit status from the Kubernetes API through a minimal ServiceAccount, reads player information through the Minecraft Query Protocol, and exposes constrained Minecraft lifecycle commands.
 
 ## Commands
 
-- `/status`: Minecraft running state, namespace, pod status, and uptime.
+- `/status`: Minecraft running state, Playit readiness, pod status, and uptime.
 - `/players`: online count and player names from the read-only Minecraft Query Protocol.
-- `/server`: Minecraft version/configuration and service endpoint.
+- `/server`: Minecraft version/configuration, Playit join address, and service endpoint.
+- `/playit`: Playit agent and Minecraft Service endpoint health.
 
 ## Environment
 
@@ -24,6 +25,9 @@ The bot does not implement infrastructure mutation. It reads Minecraft status fr
 | `MINECRAFT_DEPLOYMENT_NAME` | `minecraft` | Minecraft Deployment name |
 | `MINECRAFT_SERVICE_NAME` | `minecraft` | Minecraft Service name |
 | `MINECRAFT_LABEL_SELECTOR` | `app.kubernetes.io/name=minecraft` | Pod selector |
+| `PLAYIT_DEPLOYMENT_NAME` | `playit` | Playit Deployment name |
+| `PLAYIT_LABEL_SELECTOR` | `app.kubernetes.io/name=playit` | Playit pod selector |
+| `PLAYIT_JOIN_ADDRESS` | empty | Optional public join address shown in Discord |
 | `MINECRAFT_QUERY_HOST` | `minecraft-query` | Internal Minecraft Query Service host |
 | `MINECRAFT_QUERY_PORT` | `25565` | Minecraft Query UDP port |
 | `MINECRAFT_QUERY_TIMEOUT_MS` | `2000` | Query timeout in milliseconds |

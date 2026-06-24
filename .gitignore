@@ -50,6 +50,7 @@ kubeconfig.*
 .env
 .env.*
 !.env.example
+mineops-admins.json
 *.secret
 *.secrets
 secrets.yaml

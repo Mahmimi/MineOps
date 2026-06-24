@@ -11,9 +11,12 @@ DISCORD_TOKEN=
 DISCORD_CLIENT_ID=
 DISCORD_GUILD_ID=
 PLAYIT_SECRET_KEY=
+PLAYIT_JOIN_ADDRESS=
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
 ```
+
+`PLAYIT_JOIN_ADDRESS` is not a secret; it lets the CLI/docs-facing bot responses show the public address players should use.
 
 ## Local Workflow
 

@@ -2,10 +2,14 @@ param(
   [Parameter(Position = 0)]
   [string]$Backup = "latest",
 
-  [string]$BackupRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) "backups")
+  [string]$BackupRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
+  $BackupRoot = Join-Path $RepoRoot "backups"
+}
 
 function Format-Bytes {
   param([long]$Bytes)

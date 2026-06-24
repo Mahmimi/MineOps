@@ -8,6 +8,33 @@ kubectl get svc -n mineops
 kubectl get cronjob -n mineops
 ```
 
+## Check Playit Public Join Path
+
+Use MineOps first:
+
+```powershell
+.\mineops.ps1 playit
+.\mineops.ps1 status
+.\mineops.ps1 doctor
+```
+
+Then verify Kubernetes directly:
+
+```powershell
+kubectl get deploy playit minecraft -n mineops
+kubectl get svc,endpoints minecraft minecraft-query -n mineops
+kubectl logs -n mineops deployment/playit --tail=120
+```
+
+If Playit logs say the tunnel is running but `endpoints/minecraft` is `<none>`, Minecraft Launcher cannot ping or connect through the Playit address because the tunnel has no Minecraft pod behind the Service.
+
+Common fix:
+
+```powershell
+.\mineops.ps1 start minecraft
+.\mineops.ps1 playit
+```
+
 ## Minecraft Logs
 
 ```powershell

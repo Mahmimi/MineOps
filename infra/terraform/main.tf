@@ -43,13 +43,20 @@ resource "kubernetes_persistent_volume_claim_v1" "minecraft_data" {
 
     resources {
       requests = {
-        storage = var.minecraft_storage_size
+        storage = local.cfg_storage_size
       }
     }
   }
 }
 
 resource "kubernetes_deployment_v1" "minecraft" {
+  lifecycle {
+    ignore_changes = [
+      spec[0].replicas,
+      spec[0].template[0].metadata[0].annotations["kubectl.kubernetes.io/restartedAt"],
+    ]
+  }
+
   metadata {
     name      = "minecraft"
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
@@ -95,13 +102,13 @@ resource "kubernetes_deployment_v1" "minecraft" {
 
           resources {
             requests = {
-              cpu    = var.minecraft_cpu_request
-              memory = var.minecraft_memory_request
+              cpu    = local.cfg_minecraft_cpu_request
+              memory = local.cfg_minecraft_memory_request
             }
 
             limits = {
-              cpu    = var.minecraft_cpu_limit
-              memory = var.minecraft_memory_limit
+              cpu    = local.cfg_minecraft_cpu_limit
+              memory = local.cfg_minecraft_memory_limit
             }
           }
 
@@ -112,32 +119,32 @@ resource "kubernetes_deployment_v1" "minecraft" {
 
           env {
             name  = "TYPE"
-            value = var.minecraft_type
+            value = local.cfg_minecraft_type
           }
 
           env {
             name  = "VERSION"
-            value = var.minecraft_version
+            value = local.cfg_minecraft_version
           }
 
           env {
             name  = "MEMORY"
-            value = var.minecraft_memory
+            value = local.cfg_minecraft_memory
           }
 
           env {
             name  = "ONLINE_MODE"
-            value = "TRUE"
+            value = upper(tostring(local.cfg_minecraft_online_mode))
           }
 
           env {
             name  = "DIFFICULTY"
-            value = "normal"
+            value = local.cfg_minecraft_difficulty
           }
 
           env {
             name  = "MODE"
-            value = "survival"
+            value = local.cfg_minecraft_mode
           }
 
           env {
@@ -156,18 +163,28 @@ resource "kubernetes_deployment_v1" "minecraft" {
           }
 
           env {
+            name  = "ENABLE_RCON"
+            value = "false"
+          }
+
+          env {
             name  = "QUERY_PORT"
             value = tostring(var.minecraft_query_port)
           }
 
           env {
+            name  = "MAX_PLAYERS"
+            value = tostring(local.cfg_minecraft_max_players)
+          }
+
+          env {
             name  = "SEED"
-            value = var.minecraft_seed
+            value = tostring(local.cfg_minecraft_seed)
           }
 
           env {
             name  = "OPS"
-            value = var.minecraft_ops
+            value = local.cfg_minecraft_ops
           }
 
           env {
@@ -262,6 +279,12 @@ resource "kubernetes_secret_v1" "playit" {
 
 resource "kubernetes_deployment_v1" "playit" {
   depends_on = [kubernetes_secret_v1.playit]
+
+  lifecycle {
+    ignore_changes = [
+      spec[0].template[0].metadata[0].annotations["kubectl.kubernetes.io/restartedAt"],
+    ]
+  }
 
   metadata {
     name      = "playit"

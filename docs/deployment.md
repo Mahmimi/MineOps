@@ -30,6 +30,7 @@ DISCORD_TOKEN=
 DISCORD_CLIENT_ID=
 DISCORD_GUILD_ID=
 PLAYIT_SECRET_KEY=
+PLAYIT_JOIN_ADDRESS=
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
 ```
@@ -104,6 +105,8 @@ kubectl logs -n mineops deployment/discord-bot
 Expected:
 
 - Minecraft pod is running.
+- Playit pod is running.
+- `endpoints/minecraft` has at least one endpoint.
 - Discord bot pod is running.
 - Backup CronJob exists.
 - Discord bot logs show command registration.

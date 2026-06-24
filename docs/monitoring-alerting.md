@@ -1,6 +1,6 @@
 ﻿# Monitoring and Alerting
 
-MineOps Phase 5.1 provides a lightweight monitoring and alerting foundation without installing Prometheus.
+MineOps v1.0.0 provides a lightweight monitoring and alerting foundation without installing Prometheus.
 
 ## Monitoring Layer
 
@@ -63,6 +63,19 @@ DISCORD_ALERT_CHANNEL_ID=
 
 When the value is empty, alert evaluation and durable history still run, but Discord alert delivery is disabled.
 
+Discord alert notifications are rendered as embeds using the same MineOps visual system as slash commands.
+
+Alert embeds include:
+
+- severity-based icon and color
+- `ACTIVE` or `RESOLVED` status
+- timestamp field
+- reason for active incidents
+- downtime duration for recovered incidents
+- MineOps footer branding
+
+The alerting service emits provider-neutral alert payloads. `DiscordAlertProvider` renders those payloads to Discord embeds, so future Slack or email providers can be added without changing alert evaluation logic.
+
 ## Current Alerts
 
 - Minecraft offline
@@ -95,9 +108,9 @@ The bot sends or records one active alert per incident key and one recovery reco
 
 Active incident state is currently in memory. Historical alert records are durable on the alert-history PVC.
 
-## Phase 6 Readiness
+## Observability Roadmap
 
-Phase 6 should replace or supplement the lightweight providers with:
+Future MineOps 1.x releases can replace or supplement the lightweight providers with:
 
 - Prometheus metrics queries
 - Grafana dashboards

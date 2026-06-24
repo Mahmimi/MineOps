@@ -61,6 +61,11 @@ $discordClientId = Require-EnvValue -Values $envValues -Name "DISCORD_CLIENT_ID"
 $discordGuildId = Require-EnvValue -Values $envValues -Name "DISCORD_GUILD_ID"
 $discordAlertChannelId = if ($envValues.ContainsKey("DISCORD_ALERT_CHANNEL_ID")) { $envValues["DISCORD_ALERT_CHANNEL_ID"] } else { "" }
 $playitSecretKey = Require-EnvValue -Values $envValues -Name "PLAYIT_SECRET_KEY"
+$playitJoinAddress = if ($envValues.ContainsKey("PLAYIT_JOIN_ADDRESS")) { $envValues["PLAYIT_JOIN_ADDRESS"] } else { "" }
+$idleShutdownEnabled = if ($envValues.ContainsKey("IDLE_SHUTDOWN_ENABLED") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_ENABLED"])) { $envValues["IDLE_SHUTDOWN_ENABLED"] } else { "true" }
+$idleShutdownMinutes = if ($envValues.ContainsKey("IDLE_SHUTDOWN_MINUTES") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_MINUTES"])) { $envValues["IDLE_SHUTDOWN_MINUTES"] } else { "30" }
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$adminConfigPath = Join-Path $repoRoot "mineops-admins.json"
 
 Write-Host "Bootstrapping MineOps runtime Secrets in namespace '$Namespace'."
 Write-Host "Secret values are not printed."
@@ -77,5 +82,22 @@ kubectl create secret generic playit-secret `
   -n $Namespace `
   --from-literal=secret-key="$playitSecretKey" `
   --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl create configmap mineops-runtime-config `
+  -n $Namespace `
+  --from-literal=PLAYIT_JOIN_ADDRESS="$playitJoinAddress" `
+  --from-literal=IDLE_SHUTDOWN_ENABLED="$idleShutdownEnabled" `
+  --from-literal=IDLE_SHUTDOWN_MINUTES="$idleShutdownMinutes" `
+  --dry-run=client -o yaml | kubectl apply -f -
+
+if (Test-Path -LiteralPath $adminConfigPath) {
+  kubectl create configmap mineops-admins `
+    -n $Namespace `
+    --from-file=mineops-admins.json="$adminConfigPath" `
+    --dry-run=client -o yaml | kubectl apply -f -
+  Write-Host "MineOps admin allow-list ConfigMap is ready."
+} else {
+  Write-Host "MineOps admin allow-list not found. Copy mineops-admins.json.example to mineops-admins.json to enable admin-only Discord lifecycle commands."
+}
 
 Write-Host "MineOps runtime Secrets are ready."

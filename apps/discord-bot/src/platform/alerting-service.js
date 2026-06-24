@@ -1,12 +1,9 @@
-﻿function formatTimestamp(date = new Date()) {
-  return date.toISOString().replace('T', ' ').slice(0, 16);
-}
-
 function formatDuration(startedAt) {
   const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   const minutes = Math.floor(seconds / 60);
+  if (seconds < 60) return `${seconds}s`;
   if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
-  return `${minutes} minutes`;
+  return `${minutes}m`;
 }
 
 export function startAlertingService({ config, logger, alertProvider, metricsProvider, historyStore, stateStore }) {
@@ -21,16 +18,26 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
 
   const active = new Map();
 
-  async function publish(message) {
+  async function publish(payload) {
     if (!alertProvider) return;
-    await alertProvider.publish(message);
+    await alertProvider.publish(payload);
   }
 
-  async function raise(key, alert, recovery) {
+  async function raise(key, alert) {
     if (alert.active) {
       if (active.has(key)) return;
-      active.set(key, { startedAt: Date.now(), recovery });
-      await publish(alert.message);
+      const startedAt = Date.now();
+      active.set(key, { startedAt });
+      await publish({
+        type: key,
+        status: 'ACTIVE',
+        severity: alert.severity ?? 'WARN',
+        title: alert.title ?? alert.summary,
+        summary: alert.summary,
+        reason: alert.reason,
+        details: alert.details,
+        startedAt: new Date(startedAt).toISOString(),
+      });
       historyStore?.append({ type: key, severity: alert.severity ?? 'WARN', message: alert.summary, resolved: false });
       stateStore?.appendEvent({ type: 'alert', severity: alert.severity ?? 'WARN', message: alert.summary });
       logger.warn('mineops alert raised', { key });
@@ -40,7 +47,17 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
     const incident = active.get(key);
     if (!incident) return;
     active.delete(key);
-    await publish(incident.recovery(incident.startedAt));
+    await publish({
+      type: key,
+      status: 'RESOLVED',
+      severity: 'INFO',
+      title: alert.summary ?? key,
+      recoveryTitle: alert.recoveryTitle ?? alert.recoverySummary ?? `${key} recovered`,
+      summary: alert.recoverySummary ?? `${key} recovered`,
+      duration: formatDuration(incident.startedAt),
+      startedAt: new Date(incident.startedAt).toISOString(),
+      resolvedAt: new Date().toISOString(),
+    });
     historyStore?.append({ type: key, severity: 'INFO', message: alert.recoverySummary ?? `${key} recovered`, resolved: true });
     stateStore?.appendEvent({ type: 'alert', severity: 'INFO', message: alert.recoverySummary ?? `${key} recovered` });
     logger.info('mineops alert recovered', { key });
@@ -57,25 +74,34 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
       active: !snapshot.running,
       severity: 'WARN',
       summary: 'Minecraft offline',
+      title: 'Minecraft Offline',
       recoverySummary: 'Minecraft recovered',
-      message: `Minecraft Offline\n\nTime:\n${formatTimestamp()}\n\nReason:\nPod Not Ready`,
-    }, (startedAt) => `Minecraft Recovered\n\nDowntime:\n${formatDuration(startedAt)}`);
+      recoveryTitle: 'Minecraft Recovered',
+      reason: 'Pod Not Ready',
+    });
 
     await raise('backup-failed', {
       active: snapshot.backup?.latestJob?.failed === true,
       severity: 'WARN',
       summary: 'Backup failed',
+      title: 'Backup Failed',
       recoverySummary: 'Backup recovered',
-      message: `Backup Failed\n\nTime:\n${formatTimestamp()}\n\nReason:\nBackup Job Failed`,
-    }, (startedAt) => `Backup Recovered\n\nIncident Duration:\n${formatDuration(startedAt)}`);
+      recoveryTitle: 'Backup Recovered',
+      reason: 'Backup Job Failed',
+    });
 
     await raise('backup-stale', {
       active: snapshot.backup?.available === true && snapshot.backup?.stale === true,
       severity: 'WARN',
       summary: 'Backup stale',
+      title: 'Backup Stale',
       recoverySummary: 'Backup recovered',
-      message: `Backup Stale\n\nLast Backup:\n${snapshot.backup?.lastBackupAge ?? 'not available'}`,
-    }, (startedAt) => `Backup Fresh Again\n\nIncident Duration:\n${formatDuration(startedAt)}`);
+      recoveryTitle: 'Backup Fresh Again',
+      reason: 'Backup age exceeded threshold',
+      details: {
+        'Last Backup': snapshot.backup?.lastBackupAge ?? 'not available',
+      },
+    });
   }
 
   const timer = setInterval(() => {

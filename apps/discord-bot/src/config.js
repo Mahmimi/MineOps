@@ -11,6 +11,10 @@ function intFromEnv(value, defaultValue) {
   return Number.isNaN(parsed) ? defaultValue : parsed;
 }
 
+function pathFromEnv(value, defaultValue) {
+  return value === undefined || value === '' ? defaultValue : value;
+}
+
 export function loadConfig(env = process.env) {
   const discordToken = env.DISCORD_TOKEN ?? '';
 
@@ -34,8 +38,12 @@ export function loadConfig(env = process.env) {
       minecraftServiceName: env.MINECRAFT_SERVICE_NAME ?? 'minecraft',
       minecraftLabelSelector: env.MINECRAFT_LABEL_SELECTOR ?? 'app.kubernetes.io/name=minecraft',
       minecraftContainerName: env.MINECRAFT_CONTAINER_NAME ?? 'minecraft',
+      playitDeploymentName: env.PLAYIT_DEPLOYMENT_NAME ?? 'playit',
+      playitLabelSelector: env.PLAYIT_LABEL_SELECTOR ?? 'app.kubernetes.io/name=playit',
+      playitJoinAddress: env.PLAYIT_JOIN_ADDRESS ?? '',
       backupCronJobName: env.BACKUP_CRONJOB_NAME ?? 'minecraft-backup',
       backupLabelSelector: env.BACKUP_LABEL_SELECTOR ?? 'app.kubernetes.io/name=minecraft-backup',
+      adminConfigPath: pathFromEnv(env.MINEOPS_ADMIN_CONFIG_PATH, '/app/config/mineops-admins.json'),
     },
     minecraft: {
       queryHost: env.MINECRAFT_QUERY_HOST ?? 'minecraft-query',
@@ -46,6 +54,13 @@ export function loadConfig(env = process.env) {
       enabled: boolFromEnv(env.MONITORING_ENABLED, true),
       intervalMs: intFromEnv(env.MONITORING_INTERVAL_MS, 60000),
       pvcUsageWarningPercent: intFromEnv(env.PVC_USAGE_WARNING_PERCENT, 80),
+    },
+    lifecycle: {
+      idleShutdownEnabled: boolFromEnv(env.IDLE_SHUTDOWN_ENABLED, true),
+      idleShutdownMinutes: intFromEnv(env.IDLE_SHUTDOWN_MINUTES, 30),
+      intervalMs: intFromEnv(env.LIFECYCLE_INTERVAL_MS, 60000),
+      operationTimeoutMs: intFromEnv(env.LIFECYCLE_OPERATION_TIMEOUT_MS, 600000),
+      readinessTimeoutMs: intFromEnv(env.LIFECYCLE_READINESS_TIMEOUT_MS, 180000),
     },
   };
 }

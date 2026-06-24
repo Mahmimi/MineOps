@@ -10,9 +10,8 @@ minecraft_service_type = "LoadBalancer"
 minecraft_query_enabled = true
 minecraft_query_port    = 25565
 
-# Credential-free validation defaults.
-# Set playit_replicas = 1 only when using a non-production Playit token.
-playit_replicas     = 0
+# Playit is enabled by default. The normal workflow injects the real secret from .env.
+playit_replicas     = 1
 playit_secret_value = "replace-with-non-production-playit-secret"
 
 backup_enabled   = true

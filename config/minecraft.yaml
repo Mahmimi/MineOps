@@ -1,0 +1,33 @@
+minecraft:
+  type: PAPER
+  version: LATEST
+
+world:
+  seed: "5063885805507972583"
+  difficulty: normal
+  mode: survival
+
+server:
+  memory: 4G
+  onlineMode: true
+  maxPlayers: 20
+
+operators:
+  - Jiranuwat
+
+backup:
+  enabled: true
+  interval: "*/30 * * * *"
+  mode: append_with_limit
+  limit: 5
+
+storage:
+  size: 20Gi
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 5Gi
+  limits:
+    cpu: "3000m"
+    memory: 6Gi

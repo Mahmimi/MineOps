@@ -6,6 +6,9 @@ import { KubernetesStatusProvider } from './platform/kubernetes-status-provider.
 import { MinecraftQueryProvider } from './platform/minecraft-query-provider.js';
 import { MineOpsPlatformService } from './platform/mineops-platform-service.js';
 import { PlatformStateStore } from './platform/platform-state-store.js';
+import { AdminAuthorizationService } from './platform/admin-authorization-service.js';
+import { OperationLockService } from './platform/operation-lock-service.js';
+import { ServerLifecycleService } from './platform/server-lifecycle-service.js';
 
 const config = loadConfig();
 const logger = createLogger({ serviceName: config.serviceName, level: config.logLevel });
@@ -22,9 +25,13 @@ logger.info('mineops discord bot starting', {
 const statusProvider = new KubernetesStatusProvider({ config, logger });
 const playerProvider = new MinecraftQueryProvider({ config, logger });
 const stateStore = new PlatformStateStore({ logger });
-const platformService = new MineOpsPlatformService({ statusProvider, playerProvider, stateStore });
+const lockService = new OperationLockService({ stateStore, timeoutMs: config.lifecycle.operationTimeoutMs });
+const adminAuthorizationService = new AdminAuthorizationService({ config, logger });
+const lifecycleService = new ServerLifecycleService({ config, statusProvider, playerProvider, stateStore, lockService, logger });
+const platformService = new MineOpsPlatformService({ statusProvider, playerProvider, stateStore, lifecycleService, adminAuthorizationService });
 const healthServer = startHealthServer({ config, logger, runtimeState, platformService });
 const discordClient = await startDiscordBot({ config, logger, runtimeState, platformService, stateStore });
+platformService.startIdleMonitor();
 
 async function shutdown(signal) {
   logger.info('shutdown requested', { signal });
@@ -33,6 +40,7 @@ async function shutdown(signal) {
     discordClient.stopMineOpsAlerting?.();
     discordClient.destroy();
   }
+  platformService.stopIdleMonitor();
 
   healthServer.close(() => {
     logger.info('health server stopped');

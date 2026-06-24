@@ -5,11 +5,15 @@ param(
   [string]$Namespace = "mineops",
   [string]$Deployment = "minecraft",
   [string]$PvcName = "minecraft-data",
-  [string]$BackupRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) "backups"),
+  [string]$BackupRoot = "",
   [string]$HelperImage = "bitnami/kubectl:latest"
 )
 
 $ErrorActionPreference = "Stop"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($BackupRoot)) {
+  $BackupRoot = Join-Path $RepoRoot "backups"
+}
 
 function Write-Step {
   param([string]$Message)
