@@ -47,13 +47,23 @@ The import command:
 
 1. Validates the source path.
 2. Detects the world structure.
-3. Verifies Minecraft is stopped.
-4. Creates a temporary migration pod.
-5. Mounts the `minecraft-data` PVC.
-6. Copies files with `kubectl cp`.
-7. Validates `world/level.dat`.
-8. Emits a `World Imported` timeline event.
-9. Deletes the migration pod.
+3. Reports the detected payload size and file count.
+4. Verifies Minecraft is stopped.
+5. Verifies no backup Job is active.
+6. Creates a temporary migration pod.
+7. Mounts the `minecraft-data` PVC.
+8. Replaces `/minecraft-data/world`.
+9. Streams only the world folder into `/minecraft-data/world`.
+10. Reports copy progress while the transfer is running.
+11. Validates `world/level.dat`.
+12. Repairs world file ownership and permissions.
+13. Emits a `World Imported` timeline event.
+14. Deletes the migration pod.
+
+When the source is a server data root such as `D:\minecraft-server\data`, MineOps imports
+`D:\minecraft-server\data\world`. Runtime folders such as `cache`, `libraries`, `versions`,
+and downloaded server jars are intentionally skipped. MineOps uses a tar stream through
+`kubectl exec` so the CLI can report progress and finish cleanly when the archive stream ends.
 
 ## Git Safety
 

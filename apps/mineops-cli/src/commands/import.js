@@ -6,7 +6,7 @@ export const importCommand = {
   description: 'Import existing Minecraft world data into the minecraft-data PVC.',
   usage: 'mineops import world <path>',
   examples: ['mineops import world "D:\\minecraft-server\\data"'],
-  execute({ args, services }) {
+  async execute({ args, services }) {
     const [type, ...pathParts] = args;
     if (type !== 'world' || pathParts.length === 0) {
       throw new UserInputError('Invalid import command', {
@@ -16,9 +16,15 @@ export const importCommand = {
     }
 
     const source = pathParts.join(' ');
-    const result = services.worldImport.importWorld(source);
+    header('Importing Minecraft World');
+    const result = await services.worldImport.importWorld(source, {
+      onStep: (message) => print(message),
+    });
+
+    print('');
     header('Minecraft World Imported');
     print(`Source: ${result.source}`);
+    print(`Copied From: ${result.copySource}`);
     print(`World: ${result.worldName}`);
     print(`Files Copied: ${result.files}`);
     print('PVC: minecraft-data');

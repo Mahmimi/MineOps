@@ -214,6 +214,8 @@ mineops start minecraft
 
 MineOps refuses import while Minecraft or backup operations are active.
 
+When importing from a server data root, MineOps copies the nested `world` folder only and shows import phase/progress output while the transfer runs.
+
 Imported world metadata is authoritative. MineOps warns about drift but does not overwrite migrated world metadata automatically.
 
 ## Update Minecraft

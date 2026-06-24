@@ -1,15 +1,35 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { UserInputError } from '../domain/errors.js';
+import { spawn } from 'node:child_process';
+import { PlatformError, UserInputError } from '../domain/errors.js';
 
-function countFiles(directory) {
-  let count = 0;
+function directoryStats(directory) {
+  const stats = { files: 0, bytes: 0 };
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) count += countFiles(fullPath);
-    else count += 1;
+    if (entry.isDirectory()) {
+      const childStats = directoryStats(fullPath);
+      stats.files += childStats.files;
+      stats.bytes += childStats.bytes;
+    } else {
+      stats.files += 1;
+      stats.bytes += fs.statSync(fullPath).size;
+    }
   }
-  return count;
+  return stats;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
 }
 
 export class WorldImportService {
@@ -45,11 +65,16 @@ export class WorldImportService {
       });
     }
 
+    const copySource = directWorld ? resolved : path.join(resolved, 'world');
+    const stats = directoryStats(copySource);
+
     return {
       source: resolved,
+      copySource,
       mode: directWorld ? 'single-world-folder' : 'data-root',
       worldName: directWorld ? path.basename(resolved) : 'world',
-      files: countFiles(resolved),
+      files: stats.files,
+      bytes: stats.bytes,
     };
   }
 
@@ -95,22 +120,164 @@ export class WorldImportService {
     this.runner.run('kubectl', ['delete', 'pod', this.podName, '-n', this.namespace, '--ignore-not-found=true'], { allowFailure: true });
   }
 
-  importWorld(sourcePath) {
+  copyWorldWithProgress({ source, destination, totalBytes, onStep }) {
+    return new Promise((resolve, reject) => {
+      const tar = spawn('tar', ['-cf', '-', '.'], {
+        cwd: source,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      const kubectl = spawn('kubectl', ['exec', '-i', '-n', this.namespace, this.podName, '--', 'tar', '-xf', '-', '-C', destination], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+      let lastReportedBytes = -1;
+      let streamedBytes = 0;
+      let tarCode = null;
+      let kubectlCode = null;
+      let settled = false;
+      let transferStreamComplete = false;
+      let forcedKubectlClose = false;
+      let closeWatchdog = null;
+
+      const clearTimers = () => {
+        clearInterval(timer);
+        if (closeWatchdog) clearTimeout(closeWatchdog);
+      };
+
+      const settleSuccess = () => {
+        if (settled) return;
+        clearTimers();
+        reportProgress();
+        settled = true;
+        resolve();
+      };
+
+      const settleFailure = (message, cause) => {
+        if (settled) return;
+        clearTimers();
+        settled = true;
+        reject(new PlatformError(message, { cause }));
+      };
+
+      const startCloseWatchdog = () => {
+        if (closeWatchdog) return;
+        closeWatchdog = setTimeout(() => {
+          if (settled) return;
+          forcedKubectlClose = true;
+          onStep('Transfer stream finished; continuing with validation...');
+          kubectl.kill();
+          settleSuccess();
+        }, 15000);
+        closeWatchdog.unref?.();
+      };
+
+      const reportProgress = () => {
+        if (streamedBytes !== lastReportedBytes) {
+          onStep(`Copying world files... ${formatBytes(streamedBytes)} streamed / ${formatBytes(totalBytes)} payload`);
+          lastReportedBytes = streamedBytes;
+        }
+      };
+
+      const timer = setInterval(reportProgress, 5000);
+      tar.stdout.on('data', (chunk) => {
+        streamedBytes += chunk.length;
+        if (!kubectl.stdin.destroyed && !kubectl.stdin.write(chunk)) {
+          tar.stdout.pause();
+        }
+      });
+      kubectl.stdin.on('drain', () => {
+        tar.stdout.resume();
+      });
+      kubectl.stdin.on('error', () => {
+        // The validation step catches incomplete imports. Stdin can close first
+        // when kubectl exits after the remote tar has finished extracting.
+      });
+      tar.stdout.on('end', () => {
+        transferStreamComplete = true;
+        if (!kubectl.stdin.destroyed) kubectl.stdin.end();
+        startCloseWatchdog();
+      });
+      tar.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+      kubectl.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+      kubectl.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      const finishIfDone = () => {
+        if (settled || tarCode === null || kubectlCode === null) return;
+        reportProgress();
+        if (tarCode === 0 && (kubectlCode === 0 || (forcedKubectlClose && transferStreamComplete))) {
+          settleSuccess();
+          return;
+        }
+        settleFailure('World copy failed', (stderr || stdout).trim() || `tar exited with ${tarCode}, kubectl exec exited with ${kubectlCode}`);
+      };
+
+      tar.on('error', (error) => {
+        kubectl.kill();
+        settleFailure('Failed to start local tar for world import', error);
+      });
+      kubectl.on('error', (error) => {
+        tar.kill();
+        settleFailure('Failed to start kubectl exec for world import', error);
+      });
+      tar.on('exit', (code) => {
+        tarCode = code;
+        if (code === 0) {
+          transferStreamComplete = true;
+          if (!kubectl.stdin.destroyed) kubectl.stdin.end();
+          startCloseWatchdog();
+        }
+        finishIfDone();
+      });
+      kubectl.on('exit', (code) => {
+        kubectlCode = code;
+        finishIfDone();
+      });
+
+      reportProgress();
+    });
+  }
+
+  async importWorld(sourcePath, { onStep = () => {} } = {}) {
+    onStep('Inspecting source directory...');
     const detected = this.detectSource(sourcePath);
+    onStep(`Source detected: ${detected.mode === 'data-root' ? 'server data root' : 'world folder'}`);
+    onStep(`World payload: ${detected.files} files, ${formatBytes(detected.bytes)}`);
+
+    onStep('Checking Minecraft is stopped and backups are idle...');
     this.ensureImportAllowed();
+
+    onStep('Creating temporary import pod...');
     this.createMigrationPod();
 
     try {
-      if (detected.mode === 'single-world-folder') {
-        this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'mkdir', '-p', '/minecraft-data/world']);
-        this.runner.run('kubectl', ['cp', '.', `${this.namespace}/${this.podName}:/minecraft-data/world`], { cwd: detected.source });
-      } else {
-        this.runner.run('kubectl', ['cp', '.', `${this.namespace}/${this.podName}:/minecraft-data`], { cwd: detected.source });
-      }
+      onStep('Preparing target world directory in minecraft-data PVC...');
+      this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'sh', '-c', 'rm -rf /minecraft-data/world && mkdir -p /minecraft-data/world']);
+
+      await this.copyWorldWithProgress({
+        source: detected.copySource,
+        destination: '/minecraft-data/world',
+        totalBytes: detected.bytes,
+        onStep,
+      });
+
+      onStep('Verifying imported world metadata...');
       this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'test', '-f', '/minecraft-data/world/level.dat']);
+
+      onStep('Repairing world file ownership and permissions...');
+      this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'sh', '-c', 'chown -R 1000:1000 /minecraft-data/world && chmod -R u+rwX,g+rwX /minecraft-data/world']);
+
       this.dataService.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'World Imported' });
       return detected;
     } finally {
+      onStep('Cleaning up temporary import pod...');
       this.cleanupMigrationPod();
     }
   }

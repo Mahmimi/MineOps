@@ -175,6 +175,8 @@ Minecraft must be stopped first:
 
 The import command creates a temporary migration pod, copies data into the PVC, validates `world/level.dat`, emits a timeline event, and removes the migration pod.
 
+For a server data root, MineOps imports the nested `world` folder only. It skips runtime caches, libraries, version downloads, and server jars, and prints each import phase plus copy progress while the tar stream is running.
+
 ### `mineops logs <minecraft|discord|playit|backup>`
 
 Shows logs for common runtime components.
