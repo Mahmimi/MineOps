@@ -83,6 +83,24 @@ resource "kubernetes_deployment_v1" "minecraft" {
       }
 
       spec {
+        init_container {
+          name              = "minecraft-data-permissions"
+          image             = var.minecraft_image
+          image_pull_policy = "IfNotPresent"
+          command           = ["/bin/sh", "-c"]
+          args              = ["chown -R 1000:1000 /data && chmod -R u+rwX,g+rwX /data"]
+
+          security_context {
+            run_as_user  = 0
+            run_as_group = 0
+          }
+
+          volume_mount {
+            name       = "minecraft-data"
+            mount_path = "/data"
+          }
+        }
+
         container {
           name              = "minecraft"
           image             = var.minecraft_image
@@ -333,6 +351,41 @@ resource "kubernetes_deployment_v1" "playit" {
                 name = var.playit_secret_name
                 key  = var.playit_secret_key
               }
+            }
+          }
+        }
+
+        container {
+          name              = "minecraft-local-proxy"
+          image             = var.playit_image
+          image_pull_policy = "IfNotPresent"
+
+          command = ["/bin/sh", "-c"]
+          args = [<<-EOT
+            cat > /tmp/minecraft-forward <<'EOF'
+            #!/bin/sh
+            exec nc minecraft 25565
+            EOF
+            chmod +x /tmp/minecraft-forward
+            exec nc -lk -p 25565 -e /tmp/minecraft-forward
+          EOT
+          ]
+
+          port {
+            name           = "minecraft"
+            container_port = 25565
+            protocol       = "TCP"
+          }
+
+          resources {
+            requests = {
+              cpu    = "10m"
+              memory = "16Mi"
+            }
+
+            limits = {
+              cpu    = "100m"
+              memory = "64Mi"
             }
           }
         }

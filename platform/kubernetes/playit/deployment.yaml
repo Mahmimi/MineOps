@@ -38,3 +38,28 @@ spec:
                 secretKeyRef:
                   name: playit-secret
                   key: secret-key
+        - name: minecraft-local-proxy
+          image: ghcr.io/playit-cloud/playit-agent:0.17
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              cat > /tmp/minecraft-forward <<'EOF'
+              #!/bin/sh
+              exec nc minecraft 25565
+              EOF
+              chmod +x /tmp/minecraft-forward
+              exec nc -lk -p 25565 -e /tmp/minecraft-forward
+          ports:
+            - name: minecraft
+              containerPort: 25565
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi

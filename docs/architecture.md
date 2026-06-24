@@ -56,6 +56,8 @@ Playit is a primary runtime component. Friends connect through the Playit addres
 - the `playit` Deployment has ready replicas
 - the `minecraft` Service has at least one endpoint behind it
 
+The Playit pod includes a `minecraft-local-proxy` sidecar. It listens on the Playit pod's `127.0.0.1:25565` and forwards to the Kubernetes `minecraft:25565` Service. This keeps existing Playit account tunnels that target `127.0.0.1:25565` working after moving Minecraft into Kubernetes.
+
 ### CLI Internal Architecture
 
 ```text

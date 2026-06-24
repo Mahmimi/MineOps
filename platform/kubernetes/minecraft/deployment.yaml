@@ -23,6 +23,21 @@ spec:
         app.kubernetes.io/part-of: mineops
         app.kubernetes.io/managed-by: terraform
     spec:
+      initContainers:
+        - name: minecraft-data-permissions
+          image: itzg/minecraft-server
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - chown -R 1000:1000 /data && chmod -R u+rwX,g+rwX /data
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          volumeMounts:
+            - name: minecraft-data
+              mountPath: /data
       containers:
         - name: minecraft
           image: itzg/minecraft-server

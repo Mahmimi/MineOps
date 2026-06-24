@@ -35,6 +35,18 @@ Common fix:
 .\mineops.ps1 playit
 ```
 
+If Playit logs show `failed to connect to origin: 127.0.0.1:25565`, the Playit cloud tunnel is targeting the Playit pod localhost. MineOps supports that by running the `minecraft-local-proxy` sidecar in the Playit pod. Verify it is present:
+
+```powershell
+kubectl get pods -n mineops -l app.kubernetes.io/name=playit -o jsonpath="{.items[0].spec.containers[*].name}"
+```
+
+Expected containers:
+
+```text
+playit minecraft-local-proxy
+```
+
 ## Minecraft Logs
 
 ```powershell
