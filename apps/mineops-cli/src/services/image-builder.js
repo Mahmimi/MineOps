@@ -14,21 +14,26 @@ function collectFiles(directory, ignored = new Set(['node_modules'])) {
 }
 
 export class ImageBuilder {
-  constructor({ runner, image, sourcePath, clusterName, statePath }) {
+  constructor({ runner, image, sourcePath, buildContextPath = sourcePath, dockerfilePath = null, fingerprintPaths = [sourcePath], clusterName, statePath }) {
     this.runner = runner;
     this.image = image;
     this.sourcePath = sourcePath;
+    this.buildContextPath = buildContextPath;
+    this.dockerfilePath = dockerfilePath;
+    this.fingerprintPaths = fingerprintPaths;
     this.clusterName = clusterName;
     this.statePath = statePath;
   }
 
   sourceFingerprint() {
     const hash = crypto.createHash('sha256');
-    for (const file of collectFiles(this.sourcePath)) {
-      hash.update(path.relative(this.sourcePath, file));
-      hash.update('\0');
-      hash.update(fs.readFileSync(file));
-      hash.update('\0');
+    for (const fingerprintPath of this.fingerprintPaths) {
+      for (const file of collectFiles(fingerprintPath)) {
+        hash.update(path.relative(this.buildContextPath, file));
+        hash.update('\0');
+        hash.update(fs.readFileSync(file));
+        hash.update('\0');
+      }
     }
     return hash.digest('hex');
   }
@@ -48,7 +53,10 @@ export class ImageBuilder {
       return { changed: false, fingerprint, message: 'Discord bot image is unchanged' };
     }
 
-    this.runner.run('docker', ['build', '-t', this.image, this.sourcePath], { quiet: true });
+    const args = ['build', '-t', this.image];
+    if (this.dockerfilePath) args.push('-f', this.dockerfilePath);
+    args.push(this.buildContextPath);
+    this.runner.run('docker', args, { quiet: true });
     fs.mkdirSync(path.dirname(this.statePath), { recursive: true });
     fs.writeFileSync(this.statePath, `${fingerprint}\n`, 'utf8');
     return { changed: true, fingerprint, message: 'Discord bot image built' };
