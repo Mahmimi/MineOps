@@ -4,14 +4,22 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRegistry } from './commands/registry.js';
 import { PlatformError, UserInputError } from './domain/errors.js';
+import { localTimestamp } from '../../utils/time.js';
 import { EnvProvider } from './infrastructure/env-provider.js';
 import { KubernetesAdapter } from './infrastructure/kubernetes-adapter.js';
 import { ProcessRunner } from './infrastructure/process-runner.js';
 import { BackupService } from './services/backup-service.js';
+import { ClusterManager } from './services/cluster-manager.js';
 import { ConfigService } from './services/config-service.js';
 import { DataService } from './services/data-service.js';
+import { DeploymentManager } from './services/deployment-manager.js';
+import { DeploymentOrchestrator } from './services/deployment-orchestrator.js';
+import { EnvironmentManager } from './services/environment-manager.js';
+import { HealthChecker } from './services/health-checker.js';
+import { ImageBuilder } from './services/image-builder.js';
 import { OperationService } from './services/operation-service.js';
 import { PlatformService } from './services/platform-service.js';
+import { RequirementValidator } from './services/requirement-validator.js';
 import { WorldImportService } from './services/world-import-service.js';
 import * as time from './services/time.js';
 import { fail, print, usage } from './ui/printer.js';
@@ -33,6 +41,8 @@ const paths = {
   k3dConfig: () => path.join(root, 'infra', 'k3d', 'local.yaml'),
   discordBot: () => path.join(root, 'apps', 'discord-bot'),
   discordManifests: () => path.join(root, 'platform', 'kubernetes', 'discord-bot'),
+  imageFingerprint: () => path.join(root, '.mineops', 'discord-bot-image.sha256'),
+  runtimeFingerprint: () => path.join(root, '.mineops', 'runtime-config.sha256'),
 };
 
 function formatBytes(bytes) {
@@ -52,6 +62,37 @@ function createServices() {
   const platform = new PlatformService({ kubernetes, runner, backupService: backups, dataService: data });
   const operations = new OperationService({ runner, namespace: constants.namespace, dataService: data });
   const worldImport = new WorldImportService({ runner, kubernetes, dataService: data, namespace: constants.namespace });
+  const requirementValidator = new RequirementValidator({ runner, envProvider: env, configService: config });
+  const clusterManager = new ClusterManager({ runner, clusterName: constants.cluster, k3dConfigPath: paths.k3dConfig() });
+  const environmentManager = new EnvironmentManager({
+    runner,
+    scriptPath: paths.script('bootstrap-secrets.ps1'),
+    namespace: constants.namespace,
+    statePath: paths.runtimeFingerprint(),
+  });
+  const imageBuilder = new ImageBuilder({
+    runner,
+    image: constants.botImage,
+    sourcePath: paths.discordBot(),
+    clusterName: constants.cluster,
+    statePath: paths.imageFingerprint(),
+  });
+  const deploymentManager = new DeploymentManager({
+    runner,
+    terraformPath: paths.terraform(),
+    manifestsPath: paths.discordManifests(),
+    namespace: constants.namespace,
+  });
+  const healthChecker = new HealthChecker({ kubernetes });
+  const deployment = new DeploymentOrchestrator({
+    requirementValidator,
+    clusterManager,
+    environmentManager,
+    imageBuilder,
+    deploymentManager,
+    healthChecker,
+    dataService: data,
+  });
   return {
     env,
     runner,
@@ -62,6 +103,9 @@ function createServices() {
     platform,
     operations,
     worldImport,
+    clusterManager,
+    deploymentManager,
+    deployment,
     paths,
     time,
     format: { bytes: formatBytes },
@@ -73,7 +117,7 @@ function logError(error) {
     const logPath = path.join(root, '.mineops', 'mineops-cli.log');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     const details = [
-      `[${new Date().toISOString()}] ${error.stack ?? error.message}`,
+      `[${localTimestamp()}] ${error.stack ?? error.message}`,
       error.cause ? `Cause:\n${error.cause}` : null,
     ].filter(Boolean).join('\n');
     fs.appendFileSync(logPath, `${details}\n`, 'utf8');

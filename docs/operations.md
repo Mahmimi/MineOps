@@ -92,7 +92,7 @@ Restore the latest backup:
 Restore a specific backup:
 
 ```powershell
-.\scripts\restore.ps1 2026-06-23_18-30-00
+.\scripts\restore.ps1 backup_2026-06-27_1-30-36
 ```
 
 Restore is manual and intentionally not available through Discord.

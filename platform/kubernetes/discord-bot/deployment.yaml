@@ -42,6 +42,12 @@ spec:
               value: "8080"
             - name: LOG_LEVEL
               value: info
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: mineops-runtime-config
+                  key: MINEOPS_TIME_ZONE
+                  optional: true
             - name: DISCORD_TOKEN
               valueFrom:
                 secretKeyRef:

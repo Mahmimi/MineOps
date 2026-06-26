@@ -10,18 +10,20 @@ Restore the latest backup:
 .\scripts\restore.ps1 latest
 ```
 
-Restore a specific timestamped backup:
+Restore a specific backup:
 
 ```powershell
-.\scripts\restore.ps1 2026-06-23_18-30-00
+.\scripts\restore.ps1 backup_2026-06-27_1-30-36
 ```
 
 ## Validate A Backup
 
 ```powershell
 .\scripts\validate-backup.ps1 latest
-.\scripts\validate-backup.ps1 2026-06-23_18-30-00
+.\scripts\validate-backup.ps1 backup_2026-06-27_1-30-36
 ```
+
+`latest` resolves to the newest backup folder by modification time, using the same ordering shown by `mineops backups`.
 
 Validation checks:
 

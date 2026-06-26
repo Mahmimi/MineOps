@@ -5,12 +5,41 @@ export class OperationService {
     this.runner = runner;
     this.namespace = namespace;
     this.dataService = dataService;
+    this.backupCronJobName = 'minecraft-backup';
+  }
+
+  setBackupCronJobSuspended(suspend) {
+    this.runner.run('kubectl', [
+      'patch',
+      'cronjob',
+      this.backupCronJobName,
+      '-n',
+      this.namespace,
+      '--type=merge',
+      `-p={"spec":{"suspend":${suspend ? 'true' : 'false'}}}`,
+    ]);
+  }
+
+  setMinecraftVersion(version) {
+    this.runner.run('kubectl', ['set', 'env', 'deployment/minecraft', '-n', this.namespace, `VERSION=${version}`]);
+    const state = this.runner.run('kubectl', ['get', 'deployment/minecraft', '-n', this.namespace, '-o', 'jsonpath={.spec.replicas}'], {
+      capture: true,
+      allowFailure: true,
+    });
+    if (state.status === 0 && Number.parseInt(state.stdout, 10) > 0) {
+      this.runner.run('kubectl', ['rollout', 'status', 'deployment/minecraft', '-n', this.namespace, '--timeout=300s']);
+    }
   }
 
   scale(name, replicas) {
+    if (name === 'minecraft' && replicas === 0) {
+      this.setBackupCronJobSuspended(true);
+    }
+
     this.runner.run('kubectl', ['scale', `deployment/${name}`, '-n', this.namespace, `--replicas=${replicas}`]);
     if (replicas > 0) {
       this.runner.run('kubectl', ['rollout', 'status', `deployment/${name}`, '-n', this.namespace, '--timeout=300s']);
+      if (name === 'minecraft') this.setBackupCronJobSuspended(false);
     } else {
       this.runner.run('kubectl', [
         'wait',

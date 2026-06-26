@@ -38,7 +38,12 @@ $env:MINEOPS_BACKUP_HOST_PATH = (Resolve-Path .\backups).Path
 ```env
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
+MINEOPS_TIME_ZONE=
 ```
+
+Backup logs and timestamped backup folder names use `MINEOPS_TIME_ZONE`. When this value is empty, `mineops init` derives the host timezone.
+
+Backup log lines use host-local `YYYY-MM-DD HH:mm:ss` format. Backup folder names keep a filename-safe host-local variant such as `backup_2026-06-27_1-22-54`.
 
 The current cluster must be recreated with the updated k3d config before `/backups` maps to the Windows host path. Without recreation, Kubernetes still writes to `/backups` inside the existing k3d node container.
 

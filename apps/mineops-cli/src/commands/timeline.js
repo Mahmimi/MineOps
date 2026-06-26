@@ -1,5 +1,6 @@
 import { header, print } from '../ui/printer.js';
 import { icons } from '../ui/theme.js';
+import { localMinute, localShortTime, parseTimestamp } from '../../../utils/time.js';
 
 function eventIcon(severity) {
   if (severity === 'WARN') return icons.warn;
@@ -8,8 +9,7 @@ function eventIcon(severity) {
 }
 
 function shortTime(timestamp) {
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? '??:??' : date.toISOString().slice(11, 16);
+  return localShortTime(timestamp);
 }
 
 export const timelineCommand = {
@@ -31,10 +31,9 @@ export const timelineCommand = {
     if (filter) events = events.filter((event) => event.type === filter);
     const seen = new Set();
     events = events
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .sort((a, b) => parseTimestamp(b.timestamp) - parseTimestamp(a.timestamp))
       .filter((event) => {
-        const timestamp = new Date(event.timestamp);
-        const minute = Number.isNaN(timestamp.getTime()) ? 'unknown' : timestamp.toISOString().slice(0, 16);
+        const minute = localMinute(event.timestamp);
         const key = `${event.severity}:${event.message}:${minute}`;
         if (seen.has(key)) return false;
         seen.add(key);

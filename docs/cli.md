@@ -6,7 +6,6 @@ Use it from the repository root:
 
 ```powershell
 .\mineops.ps1 init
-.\mineops.ps1 deploy
 .\mineops.ps1 status
 ```
 
@@ -24,24 +23,16 @@ Global help:
 
 ### `mineops init`
 
-Runs the setup wizard:
+Initializes or reconciles the full local platform:
 
 - validates local tools
-- validates `.env`
+- validates OS, `.env`, and `config/minecraft.yaml`
 - prepares host storage folders
-- applies secrets when the cluster namespace exists
-- tells the operator whether the platform is ready to deploy
-
-### `mineops deploy`
-
-Runs the deployment workflow:
-
-1. Build Discord bot image.
-2. Import image into k3d.
-3. Run Terraform init/apply.
-4. Bootstrap secrets.
-5. Apply Kubernetes app manifests.
-6. Wait for Discord bot rollout.
+- creates the k3d cluster only when missing
+- builds and loads the Discord bot image only when necessary
+- reconciles Terraform infrastructure and Kubernetes manifests
+- injects runtime secrets/config
+- waits for workloads and reports a concise deployment summary
 
 ### `mineops status`
 
@@ -155,7 +146,7 @@ Disables maintenance mode and resumes normal alert evaluation.
 
 Creates and waits for a manual backup Job.
 
-### `mineops restore <latest|timestamp>`
+### `mineops restore <latest|backup-name>`
 
 Runs the manual restore workflow.
 
@@ -204,7 +195,6 @@ MineOps Discord admin operations use a local allow-list:
 ```powershell
 Copy-Item mineops-admins.json.example mineops-admins.json
 .\mineops.ps1 init
-.\mineops.ps1 deploy
 ```
 
 `mineops-admins.json` is ignored by Git.

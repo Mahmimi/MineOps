@@ -1,6 +1,6 @@
 minecraft:
   type: PAPER
-  version: LATEST
+  version: 26.2
 
 world:
   seed: "5063885805507972583"

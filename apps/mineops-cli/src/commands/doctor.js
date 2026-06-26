@@ -13,7 +13,7 @@ export const doctorCommand = {
       ok('Cluster Reachable');
       print('');
       print('MineOps is not deployed yet.');
-      print('Next: run mineops deploy');
+      print('Next: run mineops init');
       return;
     }
     const checks = [

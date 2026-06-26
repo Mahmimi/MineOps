@@ -37,7 +37,7 @@ export class BackupService {
     const root = path.join(this.root, 'backups');
     if (!fs.existsSync(root)) return [];
     return fs.readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && (/^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(entry.name) || entry.name === 'latest'))
+      .filter((entry) => entry.isDirectory() && (/^backup_\d{4}-\d{2}-\d{2}_\d{1,2}-\d{2}-\d{2}$/.test(entry.name) || /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$/.test(entry.name) || entry.name === 'latest'))
       .map((entry) => {
         const fullPath = path.join(root, entry.name);
         const stat = fs.statSync(fullPath);

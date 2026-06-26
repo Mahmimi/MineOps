@@ -31,6 +31,13 @@ resource "kubernetes_namespace_v1" "mineops" {
 resource "kubernetes_persistent_volume_claim_v1" "minecraft_data" {
   wait_until_bound = false
 
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      spec[0].resources[0].requests,
+    ]
+  }
+
   metadata {
     name      = "minecraft-data"
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
@@ -53,7 +60,7 @@ resource "kubernetes_deployment_v1" "minecraft" {
   lifecycle {
     ignore_changes = [
       spec[0].replicas,
-      spec[0].template[0].metadata[0].annotations["kubectl.kubernetes.io/restartedAt"],
+      spec[0].template,
     ]
   }
 
@@ -133,6 +140,11 @@ resource "kubernetes_deployment_v1" "minecraft" {
           env {
             name  = "EULA"
             value = "TRUE"
+          }
+
+          env {
+            name  = "TZ"
+            value = var.mineops_time_zone
           }
 
           env {
@@ -353,6 +365,11 @@ resource "kubernetes_deployment_v1" "playit" {
               }
             }
           }
+
+          env {
+            name  = "TZ"
+            value = var.mineops_time_zone
+          }
         }
 
         container {
@@ -375,6 +392,11 @@ resource "kubernetes_deployment_v1" "playit" {
             name           = "minecraft"
             container_port = 25565
             protocol       = "TCP"
+          }
+
+          env {
+            name  = "TZ"
+            value = var.mineops_time_zone
           }
 
           resources {

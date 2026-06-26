@@ -1,32 +1,14 @@
-import fs from 'node:fs';
 import { header, ok, print } from '../ui/printer.js';
 import { UserInputError } from '../domain/errors.js';
 
 export const clusterCommand = {
   name: 'cluster',
-  description: 'Manage the local k3d cluster.',
-  usage: 'mineops cluster <create|delete|recreate|status>',
-  examples: ['mineops cluster create', 'mineops cluster status'],
+  description: 'Inspect or explicitly reset the local k3d cluster.',
+  usage: 'mineops cluster <delete|recreate|status>',
+  examples: ['mineops cluster status', 'mineops cluster recreate'],
   async execute({ args, services }) {
     const action = args[0];
     if (!action) throw new UserInputError('Missing cluster action', { usage: this.usage, examples: this.examples });
-    if (action === 'create') {
-      header('Creating MineOps Cluster');
-      const existing = services.runner.run('k3d', ['cluster', 'list', 'mineops-local'], { capture: true, allowFailure: true });
-      if (existing.status === 0 && existing.stdout.includes('mineops-local')) {
-        ok('Cluster already exists');
-        print('Next: run mineops deploy');
-        return;
-      }
-      const env = services.env.load({ optional: true });
-      fs.mkdirSync(env.MINEOPS_STORAGE_PATH, { recursive: true });
-      fs.mkdirSync(env.MINEOPS_BACKUP_HOST_PATH, { recursive: true });
-      print('Creating local Kubernetes cluster...');
-      services.runner.run('k3d', ['cluster', 'create', '--config', services.paths.k3dConfig()], { quiet: true });
-      ok('Cluster created');
-      print('Next: run mineops deploy');
-      return;
-    }
     if (action === 'delete') {
       header('Deleting MineOps Cluster');
       services.runner.run('k3d', ['cluster', 'delete', 'mineops-local'], { allowFailure: true });
@@ -35,7 +17,9 @@ export const clusterCommand = {
     }
     if (action === 'recreate') {
       await this.execute({ args: ['delete'], services });
-      await this.execute({ args: ['create'], services });
+      header('Recreating MineOps Cluster');
+      services.clusterManager.ensure({ env: services.env.load({ optional: true }) });
+      print('Next: run mineops init');
       return;
     }
     if (action === 'status') {

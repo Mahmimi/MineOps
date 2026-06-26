@@ -62,6 +62,18 @@ $discordGuildId = Require-EnvValue -Values $envValues -Name "DISCORD_GUILD_ID"
 $discordAlertChannelId = if ($envValues.ContainsKey("DISCORD_ALERT_CHANNEL_ID")) { $envValues["DISCORD_ALERT_CHANNEL_ID"] } else { "" }
 $playitSecretKey = Require-EnvValue -Values $envValues -Name "PLAYIT_SECRET_KEY"
 $playitJoinAddress = if ($envValues.ContainsKey("PLAYIT_JOIN_ADDRESS")) { $envValues["PLAYIT_JOIN_ADDRESS"] } else { "" }
+$mineopsTimeZone = if ($envValues.ContainsKey("MINEOPS_TIME_ZONE") -and -not [string]::IsNullOrWhiteSpace($envValues["MINEOPS_TIME_ZONE"])) {
+  $envValues["MINEOPS_TIME_ZONE"]
+} elseif (-not [string]::IsNullOrWhiteSpace($env:MINEOPS_TIME_ZONE)) {
+  $env:MINEOPS_TIME_ZONE
+} else {
+  [System.TimeZoneInfo]::Local.Id
+}
+$mineopsTimeOffsetSeconds = if (-not [string]::IsNullOrWhiteSpace($env:MINEOPS_TIME_OFFSET_SECONDS)) {
+  $env:MINEOPS_TIME_OFFSET_SECONDS
+} else {
+  [int][System.TimeZoneInfo]::Local.GetUtcOffset([DateTimeOffset]::Now).TotalSeconds
+}
 $idleShutdownEnabled = if ($envValues.ContainsKey("IDLE_SHUTDOWN_ENABLED") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_ENABLED"])) { $envValues["IDLE_SHUTDOWN_ENABLED"] } else { "true" }
 $idleShutdownMinutes = if ($envValues.ContainsKey("IDLE_SHUTDOWN_MINUTES") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_MINUTES"])) { $envValues["IDLE_SHUTDOWN_MINUTES"] } else { "30" }
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -86,6 +98,8 @@ kubectl create secret generic playit-secret `
 kubectl create configmap mineops-runtime-config `
   -n $Namespace `
   --from-literal=PLAYIT_JOIN_ADDRESS="$playitJoinAddress" `
+  --from-literal=MINEOPS_TIME_ZONE="$mineopsTimeZone" `
+  --from-literal=MINEOPS_TIME_OFFSET_SECONDS="$mineopsTimeOffsetSeconds" `
   --from-literal=IDLE_SHUTDOWN_ENABLED="$idleShutdownEnabled" `
   --from-literal=IDLE_SHUTDOWN_MINUTES="$idleShutdownMinutes" `
   --dry-run=client -o yaml | kubectl apply -f -

@@ -1,6 +1,12 @@
 # Deployment
 
-This guide deploys MineOps to a local k3d cluster.
+MineOps uses a single idempotent deployment command:
+
+```powershell
+.\mineops.ps1 init
+```
+
+Running the command repeatedly is safe. Existing clusters are reused, existing Kubernetes resources are reconciled, unchanged images are not rebuilt, and existing Minecraft runtime metadata is preserved after the initial Terraform creation.
 
 ## Prerequisites
 
@@ -9,12 +15,13 @@ This guide deploys MineOps to a local k3d cluster.
 - kubectl
 - Terraform
 - Node.js and npm
+- PowerShell
 - Discord bot token
 - Discord application client ID
 - Discord test server guild ID
 - Playit secret key
 
-## 1. Configure Local Environment
+## Configure
 
 From the repository root:
 
@@ -30,106 +37,75 @@ DISCORD_TOKEN=
 DISCORD_CLIENT_ID=
 DISCORD_GUILD_ID=
 PLAYIT_SECRET_KEY=
+```
+
+Optional values:
+
+```env
+DISCORD_ALERT_CHANNEL_ID=
 PLAYIT_JOIN_ADDRESS=
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
+MINEOPS_TIME_ZONE=
+IDLE_SHUTDOWN_ENABLED=true
+IDLE_SHUTDOWN_MINUTES=30
 ```
 
-Create local host folders:
+Leave `MINEOPS_TIME_ZONE` empty to let `mineops init` derive the host timezone. Set it explicitly to an IANA timezone such as `Asia/Bangkok` if you want to pin runtime timestamps.
 
-```powershell
-New-Item -ItemType Directory -Force .\.local\k3d\storage
-New-Item -ItemType Directory -Force .\backups
+Edit Minecraft configuration in:
+
+```text
+config/minecraft.yaml
 ```
 
-Export absolute paths for k3d:
+## Initialize
 
 ```powershell
-$env:MINEOPS_STORAGE_PATH = (Resolve-Path .\.local\k3d\storage).Path
-$env:MINEOPS_BACKUP_HOST_PATH = (Resolve-Path .\backups).Path
+.\mineops.ps1 init
 ```
 
-## 2. Create Cluster
+The orchestrator performs these steps:
+
+1. Validate OS, required tools, Docker, `.env`, and `config/minecraft.yaml`.
+2. Create the k3d cluster only if it does not already exist.
+3. Prepare host storage/backup folders.
+4. Build the Discord bot image only when the source fingerprint changes.
+5. Load the image into k3d only when needed.
+6. Reconcile Terraform infrastructure.
+7. Inject runtime Secrets and ConfigMaps.
+8. Reconcile Discord bot Kubernetes manifests.
+9. Wait for Minecraft, Playit, and Discord bot workloads.
+10. Print a concise deployment summary.
+
+## Architecture
+
+The `init` command is presentation-only. It delegates to `DeploymentOrchestrator`, which coordinates dedicated services:
+
+- `RequirementValidator`: OS, tool, Docker, environment, and config checks.
+- `ClusterManager`: create or reuse the k3d cluster.
+- `EnvironmentManager`: host directories and runtime Secret/ConfigMap injection.
+- `ImageBuilder`: source fingerprinting, Docker build, and k3d image loading.
+- `DeploymentManager`: Terraform and Kubernetes manifest reconciliation.
+- `HealthChecker`: final Minecraft, Playit, Discord bot, and backup checks.
+
+Image and runtime config fingerprints are stored under `.mineops/`. They let repeated `init` runs skip unchanged Docker builds, k3d image loads, and config-driven workload restarts.
+
+## Runtime Idempotency
+
+Terraform creates the Minecraft PVC and initial Deployment. After first creation, existing Minecraft runtime metadata is protected from routine deploys. Use:
 
 ```powershell
-k3d cluster create --config infra/k3d/local.yaml
+.\mineops.ps1 update minecraft <version>
 ```
 
-Verify:
+for Minecraft version changes.
+
+## Explicit Cluster Reset
+
+Cluster recreation is intentionally separate and destructive:
 
 ```powershell
-kubectl cluster-info
-kubectl get nodes
-```
-
-## 3. Apply Terraform
-
-```powershell
-cd infra\terraform
-terraform init
-terraform fmt
-terraform validate
-terraform apply
-```
-
-## 4. Bootstrap Secrets
-
-```powershell
-cd D:\MineOps
-.\scripts\validate-env.ps1
-.\scripts\bootstrap-secrets.ps1
-```
-
-This creates:
-
-- `discord-bot-secret`
-- `playit-secret`
-
-## 5. Deploy Discord Bot
-
-```powershell
-docker build -t mineops-discord-bot:phase3.5 apps\discord-bot
-k3d image import mineops-discord-bot:phase3.5 -c mineops-local
-kubectl apply -f platform\kubernetes\discord-bot --recursive
-```
-
-## 6. Validate
-
-```powershell
-kubectl get pods -n mineops
-kubectl get svc -n mineops
-kubectl get cronjob -n mineops
-kubectl logs -n mineops deployment/discord-bot
-```
-
-Expected:
-
-- Minecraft pod is running.
-- Playit pod is running.
-- `endpoints/minecraft` has at least one endpoint.
-- Discord bot pod is running.
-- Backup CronJob exists.
-- Discord bot logs show command registration.
-
-## Recreate Cluster
-
-To recreate the local platform:
-
-```powershell
-cd D:\MineOps
-
-$env:MINEOPS_STORAGE_PATH = (Resolve-Path .\.local\k3d\storage).Path
-$env:MINEOPS_BACKUP_HOST_PATH = (Resolve-Path .\backups).Path
-
-k3d cluster delete mineops-local
-k3d cluster create --config infra/k3d/local.yaml
-
-cd infra\terraform
-terraform apply
-
-cd D:\MineOps
-.\scripts\bootstrap-secrets.ps1
-docker build -t mineops-discord-bot:phase3.5 apps\discord-bot
-k3d image import mineops-discord-bot:phase3.5 -c mineops-local
-kubectl apply -f platform\kubernetes\discord-bot --recursive
+.\mineops.ps1 cluster recreate
+.\mineops.ps1 init
 ```

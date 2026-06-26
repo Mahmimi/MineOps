@@ -69,7 +69,7 @@ Alert embeds include:
 
 - severity-based icon and color
 - `ACTIVE` or `RESOLVED` status
-- timestamp field
+- timestamp field in host-local `YYYY-MM-DD HH:mm:ss` format
 - reason for active incidents
 - downtime duration for recovered incidents
 - MineOps footer branding

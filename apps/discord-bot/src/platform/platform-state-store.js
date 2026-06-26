@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { localTimestamp, parseTimestamp } from '../../../utils/time.js';
 
 export class PlatformStateStore {
   constructor({ directory = '/app/data', logger }) {
@@ -19,7 +20,7 @@ export class PlatformStateStore {
   appendJsonl(filePath, record) {
     try {
       this.ensure(filePath);
-      fs.appendFileSync(filePath, `${JSON.stringify({ timestamp: new Date().toISOString(), ...record })}\n`, 'utf8');
+      fs.appendFileSync(filePath, `${JSON.stringify({ timestamp: localTimestamp(), ...record })}\n`, 'utf8');
     } catch (error) {
       this.logger?.error('failed to persist platform state record', { error: error.message });
     }
@@ -32,7 +33,7 @@ export class PlatformStateStore {
         .split('\n')
         .filter(Boolean)
         .map((line) => JSON.parse(line))
-        .sort((a, b) => new Date(b.timestamp ?? 0).getTime() - new Date(a.timestamp ?? 0).getTime())
+        .sort((a, b) => parseTimestamp(b.timestamp ?? 0).getTime() - parseTimestamp(a.timestamp ?? 0).getTime())
         .slice(0, limit);
     } catch (error) {
       this.logger?.warn('failed to read platform state records', { error: error.message });
@@ -109,7 +110,7 @@ export class PlatformStateStore {
   }
 
   setLifecycleState(state) {
-    this.writeJson(this.lifecyclePath, { updatedAt: new Date().toISOString(), ...state });
+    this.writeJson(this.lifecyclePath, { updatedAt: localTimestamp(), ...state });
   }
 
   getOperationLock() {

@@ -2,6 +2,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UserInputError } from '../domain/errors.js';
 
+function timeZoneOffsetSeconds(timeZone, date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(date).reduce((values, part) => {
+    if (part.type !== 'literal') values[part.type] = Number(part.value);
+    return values;
+  }, {});
+  const localAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  const utcInstant = Math.floor(date.getTime() / 1000) * 1000;
+  return Math.round((localAsUtc - utcInstant) / 1000);
+}
+
 export class EnvProvider {
   constructor({ root }) {
     this.root = root;
@@ -39,6 +58,10 @@ export class EnvProvider {
   withDefaults(values) {
     values.MINEOPS_STORAGE_PATH ||= '.local/k3d/storage';
     values.MINEOPS_BACKUP_HOST_PATH ||= './backups';
+    values.MINEOPS_TIME_ZONE ||= Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    values.MINEOPS_TIME_OFFSET_SECONDS ||= String(timeZoneOffsetSeconds(values.MINEOPS_TIME_ZONE));
+    values.TF_VAR_mineops_time_zone ||= values.MINEOPS_TIME_ZONE;
+    values.TF_VAR_mineops_time_offset_seconds ||= values.MINEOPS_TIME_OFFSET_SECONDS;
     if (values.PLAYIT_SECRET_KEY && !values.TF_VAR_playit_secret_value) {
       values.TF_VAR_playit_secret_value = values.PLAYIT_SECRET_KEY;
     }

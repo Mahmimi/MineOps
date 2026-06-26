@@ -71,6 +71,21 @@ apps/mineops-cli/src/
 
 Command handlers should stay presentation-oriented. Kubernetes reads, backup inventory, alert persistence, and lifecycle operations belong in services and infrastructure adapters.
 
+Deployment follows the same rule. `mineops init` delegates to `DeploymentOrchestrator`, which coordinates focused services:
+
+```text
+init command
+  -> DeploymentOrchestrator
+  -> RequirementValidator
+  -> ClusterManager
+  -> EnvironmentManager
+  -> ImageBuilder
+  -> DeploymentManager
+  -> HealthChecker
+```
+
+Each deployment step is idempotent: existing clusters are reused, unchanged images are skipped, Terraform and Kubernetes resources are reconciled, and existing Minecraft runtime metadata is preserved unless an explicit update command changes it.
+
 ## Discord Bot
 
 The Discord bot has two surfaces:

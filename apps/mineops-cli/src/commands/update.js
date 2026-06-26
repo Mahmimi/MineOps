@@ -12,8 +12,13 @@ export const updateCommand = {
       throw new UserInputError('Invalid update command', { usage: this.usage, examples: this.examples });
     }
 
-    const current = services.config.parse().minecraft?.version;
+    const configVersion = services.config.parse().minecraft?.version;
+    const runtimeVersion = services.config.runtimeDiff().find((row) => row.key === 'minecraft.version')?.actual;
+    const current = runtimeVersion ?? configVersion;
     if (String(current).toLowerCase() === String(version).toLowerCase()) {
+      if (String(configVersion).toLowerCase() !== String(version).toLowerCase()) {
+        services.config.setMinecraftVersion(version);
+      }
       header('Minecraft Already Up To Date');
       print(`Version: ${current}`);
       return;
@@ -26,8 +31,7 @@ export const updateCommand = {
     print('Creating backup before upgrade...');
     services.runner.run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', `${services.paths.root()}\\mineops.ps1`, 'backup']);
     services.config.setMinecraftVersion(version);
-    services.runner.run('terraform', ['apply', '-auto-approve'], { cwd: services.paths.terraform() });
-    services.operations.restart('minecraft');
+    services.operations.setMinecraftVersion(version);
     const drift = services.config.runtimeDiff().filter((row) => row.key === 'minecraft.version')[0];
     if (drift?.drift) {
       warn('Runtime version did not match config after restart. Use latest backup for rollback if needed.');

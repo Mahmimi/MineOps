@@ -53,6 +53,15 @@ rules:
       - get
       - list
   - apiGroups:
+      - batch
+    resources:
+      - cronjobs
+    resourceNames:
+      - minecraft-backup
+    verbs:
+      - patch
+      - update
+  - apiGroups:
       - ""
     resources:
       - pods/exec

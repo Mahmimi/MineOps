@@ -156,7 +156,7 @@ All embeds include:
 
 - consistent colors
 - consistent icons
-- timestamp
+- host-local timestamps in `YYYY-MM-DD HH:mm:ss` format
 - MineOps footer
 - empty-state messaging
 - maintenance mode indicators where relevant

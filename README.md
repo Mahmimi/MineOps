@@ -69,9 +69,12 @@ DISCORD_ALERT_CHANNEL_ID=
 PLAYIT_JOIN_ADDRESS=
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
+MINEOPS_TIME_ZONE=
 IDLE_SHUTDOWN_ENABLED=true
 IDLE_SHUTDOWN_MINUTES=30
 ```
+
+If `MINEOPS_TIME_ZONE` is empty, `mineops init` derives the host timezone and injects it into MineOps runtime containers so logs, events, alerts, and backup names use host-local time.
 
 ## Configure Minecraft
 
@@ -139,30 +142,13 @@ Example:
 
 `mineops-admins.json` is ignored by Git.
 
-## Create Cluster
-
-```powershell
-mineops init
-mineops cluster create
-```
-
-## Bootstrap Secrets
-
-`mineops init` validates local tools and applies secrets when the namespace exists.
-
-Run it again after cluster creation:
+## Initialize MineOps
 
 ```powershell
 mineops init
 ```
 
-## Deploy
-
-```powershell
-mineops deploy
-```
-
-This builds the Discord bot image, imports it into k3d, applies Terraform, bootstraps secrets, applies Kubernetes manifests, and waits for rollout.
+`mineops init` is idempotent. It validates requirements, creates or reuses the k3d cluster, prepares host folders, builds and loads the Discord bot image only when needed, reconciles Terraform and Kubernetes resources, injects runtime config, waits for workloads, and prints a deployment summary.
 
 ## Validate
 
@@ -225,7 +211,7 @@ mineops update minecraft LATEST
 mineops update minecraft 1.21.1
 ```
 
-The workflow validates the version, creates a backup, updates `config/minecraft.yaml`, applies Terraform, restarts Minecraft, waits for readiness, and emits an event.
+The workflow validates the version, creates a backup, updates `config/minecraft.yaml`, patches the live Minecraft Deployment, waits for rollout when Minecraft is running, and emits an event.
 
 ## Discord Commands
 

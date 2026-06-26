@@ -1,4 +1,5 @@
 import { EmbedBuilder, SlashCommandBuilder } from 'discord.js';
+import { localDateTime } from '../../../utils/time.js';
 
 const COLORS = {
   healthy: 0x2ecc71,
@@ -54,7 +55,7 @@ function severityIcon(severity = 'INFO') {
 }
 
 function eventLine(event) {
-  return `${severityIcon(event.severity)} ${event.message ?? 'Platform event'}`;
+  return `${severityIcon(event.severity)} [${localDateTime(event.timestamp)}] ${event.message ?? 'Platform event'}`;
 }
 
 function statusColor(snapshot) {
@@ -175,7 +176,7 @@ function backupsEmbed(backup) {
   const jobs = backup.recentJobs ?? [];
   const description = jobs.length === 0
     ? 'No completed backups found yet.'
-    : jobs.map((job) => `${ICON.package} ${job.name}`).join('\n');
+    : jobs.map((job) => `${ICON.package} ${job.name}\n${ICON.clock} ${localDateTime(job.completionTime ?? job.startTime)}`).join('\n');
   return {
     embeds: [baseEmbed(`${ICON.backup} Recent Backups`, backup.stale ? COLORS.warning : COLORS.info)
       .setDescription(description)
@@ -267,7 +268,7 @@ export function createCommandHandlers({ platformService }) {
   async function lifecycle(handler, interaction) {
     try {
       const result = await handler({ user: interaction.user });
-      return lifecycleEmbed(result, result.state === 'STOPPED' ? COLORS.warning : COLORS.healthy);
+      return lifecycleEmbed(result, result.warning || result.state === 'STOPPED' ? COLORS.warning : COLORS.healthy);
     } catch (error) {
       if (error.code === 'MINEOPS_PERMISSION_DENIED') return permissionDeniedEmbed();
       if (error.code === 'MINEOPS_OPERATION_BLOCKED') return operationBlockedEmbed(error);

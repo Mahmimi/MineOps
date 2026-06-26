@@ -1,3 +1,5 @@
+import { localTimestamp, parseTimestamp } from '../../../utils/time.js';
+
 export class OperationLockService {
   constructor({ stateStore, timeoutMs = 600000 }) {
     this.stateStore = stateStore;
@@ -7,7 +9,7 @@ export class OperationLockService {
   current() {
     const lock = this.stateStore.getOperationLock();
     if (!lock) return null;
-    const expiresAt = new Date(lock.expiresAt ?? 0).getTime();
+    const expiresAt = parseTimestamp(lock.expiresAt ?? 0).getTime();
     if (expiresAt > Date.now()) return lock;
     this.stateStore.clearOperationLock();
     return null;
@@ -25,8 +27,8 @@ export class OperationLockService {
     const lock = {
       type,
       owner: owner ?? 'mineops',
-      acquiredAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + this.timeoutMs).toISOString(),
+      acquiredAt: localTimestamp(),
+      expiresAt: localTimestamp(new Date(Date.now() + this.timeoutMs)),
     };
     this.stateStore.setOperationLock(lock);
     return lock;

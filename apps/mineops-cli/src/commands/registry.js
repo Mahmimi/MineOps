@@ -3,7 +3,6 @@ import { backupsCommand } from './backups.js';
 import { clusterCommand } from './cluster.js';
 import { configCommand } from './config.js';
 import { dashboardCommand } from './dashboard.js';
-import { deployCommand } from './deploy.js';
 import { doctorCommand } from './doctor.js';
 import { eventsCommand } from './events.js';
 import { healthCommand } from './health.js';
@@ -34,7 +33,6 @@ export function createRegistry() {
     clusterCommand,
     configCommand,
     dashboardCommand,
-    deployCommand,
     doctorCommand,
     eventsCommand,
     healthCommand,

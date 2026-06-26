@@ -1,4 +1,5 @@
 import { header, print } from '../ui/printer.js';
+import { localDate } from '../../../utils/time.js';
 
 export const versionCommand = {
   name: 'version',
@@ -10,6 +11,6 @@ export const versionCommand = {
     header('MineOps Version');
     print(`MineOps Version: ${constants.version}`);
     print(`Git Commit: ${commit}`);
-    print(`Build Date: ${new Date().toISOString().slice(0, 10)}`);
+    print(`Build Date: ${localDate()}`);
   },
 };

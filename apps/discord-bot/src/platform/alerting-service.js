@@ -1,3 +1,5 @@
+import { localTimestamp } from '../../../utils/time.js';
+
 function formatDuration(startedAt) {
   const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
   const minutes = Math.floor(seconds / 60);
@@ -36,7 +38,7 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
         summary: alert.summary,
         reason: alert.reason,
         details: alert.details,
-        startedAt: new Date(startedAt).toISOString(),
+        startedAt: localTimestamp(new Date(startedAt)),
       });
       historyStore?.append({ type: key, severity: alert.severity ?? 'WARN', message: alert.summary, resolved: false });
       stateStore?.appendEvent({ type: 'alert', severity: alert.severity ?? 'WARN', message: alert.summary });
@@ -55,8 +57,8 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
       recoveryTitle: alert.recoveryTitle ?? alert.recoverySummary ?? `${key} recovered`,
       summary: alert.recoverySummary ?? `${key} recovered`,
       duration: formatDuration(incident.startedAt),
-      startedAt: new Date(incident.startedAt).toISOString(),
-      resolvedAt: new Date().toISOString(),
+      startedAt: localTimestamp(new Date(incident.startedAt)),
+      resolvedAt: localTimestamp(),
     });
     historyStore?.append({ type: key, severity: 'INFO', message: alert.recoverySummary ?? `${key} recovered`, resolved: true });
     stateStore?.appendEvent({ type: 'alert', severity: 'INFO', message: alert.recoverySummary ?? `${key} recovered` });
@@ -70,6 +72,8 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
       return;
     }
 
+    const backupsExpected = snapshot.running && snapshot.backup?.suspended !== true;
+
     await raise('minecraft-offline', {
       active: !snapshot.running,
       severity: 'WARN',
@@ -81,7 +85,7 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
     });
 
     await raise('backup-failed', {
-      active: snapshot.backup?.latestJob?.failed === true,
+      active: backupsExpected && snapshot.backup?.latestJob?.failed === true,
       severity: 'WARN',
       summary: 'Backup failed',
       title: 'Backup Failed',
@@ -91,7 +95,7 @@ export function startAlertingService({ config, logger, alertProvider, metricsPro
     });
 
     await raise('backup-stale', {
-      active: snapshot.backup?.available === true && snapshot.backup?.stale === true,
+      active: backupsExpected && snapshot.backup?.available === true && snapshot.backup?.stale === true,
       severity: 'WARN',
       summary: 'Backup stale',
       title: 'Backup Stale',

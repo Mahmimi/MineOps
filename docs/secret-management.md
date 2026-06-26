@@ -14,9 +14,12 @@ PLAYIT_SECRET_KEY=
 PLAYIT_JOIN_ADDRESS=
 MINEOPS_STORAGE_PATH=.local/k3d/storage
 MINEOPS_BACKUP_HOST_PATH=./backups
+MINEOPS_TIME_ZONE=
 ```
 
 `PLAYIT_JOIN_ADDRESS` is not a secret; it lets the CLI/docs-facing bot responses show the public address players should use.
+
+`MINEOPS_TIME_ZONE` is not a secret. It controls human-facing MineOps timestamps in runtime containers. Leave it empty when using `mineops init`; the CLI injects the host timezone.
 
 ## Local Workflow
 

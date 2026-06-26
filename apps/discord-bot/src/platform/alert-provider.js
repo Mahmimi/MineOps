@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { localDateTime } from '../../../utils/time.js';
 
 const COLORS = {
   INFO: 0x5865f2,
@@ -18,9 +19,7 @@ const ICONS = {
 };
 
 function formatDateTime(value = new Date()) {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Unknown';
-  return date.toISOString().replace('T', ' ').slice(0, 19);
+  return localDateTime(value);
 }
 
 function severityColor(severity = 'INFO', status = 'ACTIVE') {

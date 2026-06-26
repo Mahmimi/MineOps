@@ -1,6 +1,6 @@
 # Discord Bot Kubernetes Resources
 
-These manifests deploy the read-only MineOps Discord Bot.
+These manifests deploy the MineOps Discord Bot.
 
 Apply order:
 
@@ -13,4 +13,4 @@ Apply order:
 
 `secret.yaml.example` is a shape reference only. Do not apply it directly.
 
-The Role is namespace-scoped and read-only. It allows only `get` and `list` on Pods, Services, and Deployments in the `mineops` namespace.
+The Role is namespace-scoped. It can read MineOps status resources, scale only the `minecraft` Deployment, exec only into pods for console-safe lifecycle commands, and suspend or resume only the `minecraft-backup` CronJob.

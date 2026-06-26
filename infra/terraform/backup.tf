@@ -72,7 +72,25 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       set -eu
 
       log() {
-        printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"
+        printf '%s %s\n' "$(format_local_time '+%Y-%m-%d %H:%M:%S')" "$*"
+      }
+
+      local_epoch() {
+        offset="$MINEOPS_TIME_OFFSET_SECONDS"
+        echo $(( $(date +%s) + offset ))
+      }
+
+      format_local_time() {
+        format="$1"
+        epoch="$(local_epoch)"
+        date -u -d "@$epoch" "$format" 2>/dev/null || date -u -r "$epoch" "$format"
+      }
+
+      backup_timestamp() {
+        date_part="$(format_local_time '+%Y-%m-%d')"
+        hour="$(format_local_time '+%H' | sed 's/^0//')"
+        minute_second="$(format_local_time '+%M-%S')"
+        printf 'backup_%s_%s-%s\n' "$date_part" "$hour" "$minute_second"
       }
 
       kube() {
@@ -94,7 +112,8 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
         kube --request-timeout="$KUBECTL_REQUEST_TIMEOUT" get pods \
           -n "$NAMESPACE" \
           -l "$MINECRAFT_LABEL_SELECTOR" \
-          -o jsonpath='{.items[0].metadata.name}'
+          --field-selector=status.phase=Running \
+          -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sed -n '1p'
       }
 
       mc_command() {
@@ -123,7 +142,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
           return 0
         fi
         start_epoch="$(date -d "$start_time" +%s 2>/dev/null || true)"
-        now_epoch="$(date -u +%s)"
+        now_epoch="$(date +%s)"
         if [ -n "$start_epoch" ]; then
           age=$((now_epoch - start_epoch))
           if [ "$age" -lt 90 ]; then
@@ -157,15 +176,15 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
 
       enforce_limit() {
         limit="$1"
-        count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??-??-??' | sort | wc -l | tr -d ' ')"
+        count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | wc -l | tr -d ' ')"
         while [ "$count" -gt "$limit" ]; do
-          oldest="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??-??-??' | sort | sed -n '1p')"
+          oldest="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | sed -n '1p')"
           if [ -z "$oldest" ]; then
             break
           fi
           log "removing old backup: $oldest"
           rm -rf "$oldest"
-          count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -name '20??-??-??_??-??-??' | sort | wc -l | tr -d ' ')"
+          count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | wc -l | tr -d ' ')"
         done
       }
 
@@ -186,8 +205,8 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       MINECRAFT_POD="$(find_minecraft_pod)"
 
       if [ -z "$MINECRAFT_POD" ]; then
-        log "minecraft pod not found"
-        exit 1
+        log "minecraft pod not found; skipping backup"
+        exit 0
       fi
 
       trap cleanup EXIT
@@ -203,7 +222,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       sleep 2
       mc_command "save-off"
 
-      timestamp="$(date -u +%Y-%m-%d_%H-%M-%S)"
+      timestamp="$(backup_timestamp)"
       case "$BACKUP_MODE" in
         replace)
           temp_target="$BACKUP_ROOT/.latest.tmp"
@@ -298,6 +317,16 @@ resource "kubernetes_cron_job_v1" "minecraft_backup" {
               env {
                 name  = "NAMESPACE"
                 value = kubernetes_namespace_v1.mineops.metadata[0].name
+              }
+
+              env {
+                name  = "TZ"
+                value = var.mineops_time_zone
+              }
+
+              env {
+                name  = "MINEOPS_TIME_OFFSET_SECONDS"
+                value = tostring(var.mineops_time_offset_seconds)
               }
 
               env {

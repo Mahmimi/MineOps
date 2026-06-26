@@ -1,3 +1,5 @@
+import { localShortTime, parseTimestamp } from '../../../utils/time.js';
+
 export function formatDurationFromSeconds(seconds) {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);
@@ -10,17 +12,16 @@ export function formatDurationFromSeconds(seconds) {
 
 export function age(dateValue) {
   if (!dateValue) return 'not available';
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 1000));
+  const seconds = Math.max(0, Math.floor((Date.now() - parseTimestamp(dateValue).getTime()) / 1000));
   if (seconds < 60) return 'less than a minute ago';
   return `${formatDurationFromSeconds(seconds)} ago`;
 }
 
 export function durationSince(dateValue) {
   if (!dateValue) return 'not available';
-  return formatDurationFromSeconds(Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 1000)));
+  return formatDurationFromSeconds(Math.max(0, Math.floor((Date.now() - parseTimestamp(dateValue).getTime()) / 1000)));
 }
 
 export function shortTime(timestamp) {
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? '??:??' : date.toISOString().slice(11, 16);
+  return localShortTime(timestamp);
 }

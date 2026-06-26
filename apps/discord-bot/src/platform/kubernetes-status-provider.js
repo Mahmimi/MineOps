@@ -1,5 +1,6 @@
 import * as k8s from '@kubernetes/client-node';
 import stream from 'node:stream';
+import { localTimestamp } from '../../../utils/time.js';
 
 function containerEnv(container, name) {
   return container?.env?.find((item) => item.name === name)?.value ?? null;
@@ -133,6 +134,16 @@ export class KubernetesStatusProvider {
     });
   }
 
+  async setBackupCronJobSuspended(suspend) {
+    const cronJob = await this.getBackupCronJob();
+    cronJob.spec = { ...(cronJob.spec ?? {}), suspend };
+    return this.batchApi.replaceNamespacedCronJob({
+      namespace: this.config.mineops.namespace,
+      name: this.config.mineops.backupCronJobName,
+      body: cronJob,
+    });
+  }
+
   async getBackupInfo() {
     try {
       const [cronJob, jobs] = await Promise.all([this.getBackupCronJob(), this.listBackupJobs()]);
@@ -174,6 +185,7 @@ export class KubernetesStatusProvider {
         retentionLimit: containerEnv(container, 'BACKUP_LIMIT') ?? 'unknown',
         schedule: cronJob.spec?.schedule ?? 'unknown',
         interval: formatCronInterval(cronJob.spec?.schedule ?? 'unknown'),
+        suspended: cronJob.spec?.suspend === true,
         latestJob,
         activeJobs,
         backupRunning: activeJobs.length > 0,
@@ -192,6 +204,7 @@ export class KubernetesStatusProvider {
         mode: 'unknown',
         schedule: 'unknown',
         interval: 'unknown',
+        suspended: false,
         latestJob: null,
         activeJobs: [],
         backupRunning: false,
@@ -349,7 +362,7 @@ export class KubernetesStatusProvider {
     deployment.spec.template.metadata = deployment.spec.template.metadata ?? {};
     deployment.spec.template.metadata.annotations = {
       ...(deployment.spec.template.metadata.annotations ?? {}),
-      'kubectl.kubernetes.io/restartedAt': new Date().toISOString(),
+      'kubectl.kubernetes.io/restartedAt': localTimestamp(),
     };
     return this.appsApi.replaceNamespacedDeployment({
       namespace: this.config.mineops.namespace,

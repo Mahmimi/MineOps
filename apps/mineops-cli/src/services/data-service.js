@@ -1,3 +1,5 @@
+import { localTimestamp, parseTimestamp } from '../../../utils/time.js';
+
 export class DataService {
   constructor({ runner, namespace }) {
     this.runner = runner;
@@ -19,7 +21,7 @@ export class DataService {
 
   appendJsonl(relativePath, record) {
     const remotePath = `${this.base}/${relativePath}`;
-    const payload = JSON.stringify({ timestamp: new Date().toISOString(), ...record }).replace(/'/g, "'\\''");
+    const payload = JSON.stringify({ timestamp: localTimestamp(), ...record }).replace(/'/g, "'\\''");
     this.botExec(`mkdir -p $(dirname ${remotePath}) && printf '%s\\n' '${payload}' >> ${remotePath}`);
   }
 
@@ -33,7 +35,7 @@ export class DataService {
 
   activeAlerts() {
     const latestByType = new Map();
-    for (const alert of [...this.alerts()].sort((a, b) => new Date(b.timestamp ?? 0).getTime() - new Date(a.timestamp ?? 0).getTime())) {
+    for (const alert of [...this.alerts()].sort((a, b) => parseTimestamp(b.timestamp ?? 0).getTime() - parseTimestamp(a.timestamp ?? 0).getTime())) {
       const key = alert.type ?? alert.message ?? 'unknown';
       if (!latestByType.has(key)) latestByType.set(key, alert);
     }
@@ -55,7 +57,7 @@ export class DataService {
   }
 
   setMaintenance(enabled, reason = 'Scheduled maintenance') {
-    const payload = JSON.stringify({ enabled, reason, timestamp: new Date().toISOString() }).replace(/'/g, "'\\''");
+    const payload = JSON.stringify({ enabled, reason, timestamp: localTimestamp() }).replace(/'/g, "'\\''");
     this.botExec(`mkdir -p ${this.base}/maintenance && printf '%s' '${payload}' > ${this.base}/maintenance/state.json`, { allowFailure: false });
     this.appendEvent({ type: 'maintenance', severity: 'INFO', message: enabled ? 'Maintenance mode enabled' : 'Maintenance mode disabled' });
   }

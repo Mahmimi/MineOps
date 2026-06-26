@@ -41,7 +41,6 @@ Then run:
 
 ```powershell
 .\mineops.ps1 init
-.\mineops.ps1 deploy
 ```
 
 The file is ignored by Git and is converted into the `mineops-admins` ConfigMap.

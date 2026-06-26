@@ -10,6 +10,18 @@ variable "namespace" {
   default     = "mineops"
 }
 
+variable "mineops_time_zone" {
+  description = "IANA time zone used by MineOps runtime containers for human-facing logs, events, and backup names."
+  type        = string
+  default     = "UTC"
+}
+
+variable "mineops_time_offset_seconds" {
+  description = "Current host-local offset from UTC in seconds, used by lightweight backup images that do not include timezone data."
+  type        = number
+  default     = 0
+}
+
 variable "minecraft_image" {
   description = "Minecraft server image."
   type        = string

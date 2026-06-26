@@ -1,3 +1,5 @@
+import { localTimestamp, parseTimestamp } from '../../../utils/time.js';
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -18,6 +20,7 @@ export class ServerLifecycleService {
     this.lockService = lockService;
     this.logger = logger;
     this.timer = null;
+    this.idleEvaluationInProgress = false;
   }
 
   async operationBlockedBySafety() {
@@ -63,6 +66,21 @@ export class ServerLifecycleService {
     throw new Error('Minecraft query service did not respond before timeout');
   }
 
+  async checkQueryReady({ timeoutMs = 60000, operation = 'lifecycle operation' } = {}) {
+    try {
+      return await this.waitForQueryReady(timeoutMs);
+    } catch (error) {
+      this.logger?.warn('minecraft query unavailable after lifecycle readiness', {
+        operation,
+        error: error.message,
+      });
+      return {
+        available: false,
+        reason: error.message,
+      };
+    }
+  }
+
   async startServer({ actor = 'MineOps' } = {}) {
     const status = await this.statusProvider.getStatus();
     if (status.running) {
@@ -73,9 +91,20 @@ export class ServerLifecycleService {
     return this.runLocked('starting', actor, async () => {
       await this.statusProvider.scaleMinecraft(1);
       const ready = await this.statusProvider.waitForMinecraftReady({ timeoutMs: this.config.lifecycle.readinessTimeoutMs });
-      await this.waitForQueryReady();
+      const query = await this.checkQueryReady({ operation: 'start' });
+      await this.statusProvider.setBackupCronJobSuspended(false);
       this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: null });
       this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Server Started' });
+      if (!query.available) {
+        return {
+          changed: true,
+          state: 'RUNNING',
+          warning: true,
+          title: 'Minecraft Started',
+          message: 'Server pod is ready, but player query did not respond yet. Status may catch up shortly.',
+          status: ready,
+        };
+      }
       return { changed: true, state: 'RUNNING', title: 'Minecraft Online', message: 'Server is ready for players.', status: ready };
     });
   }
@@ -88,6 +117,7 @@ export class ServerLifecycleService {
 
     await this.ensureNoSafetyBlock();
     return this.runLocked('stopping', actor, async () => {
+      await this.statusProvider.setBackupCronJobSuspended(true);
       if (warn && status.running) {
         await this.broadcast(`[MineOps] Server shutdown initiated by ${actor}. Server will stop in 30 seconds.`);
         await delay(30000);
@@ -113,52 +143,68 @@ export class ServerLifecycleService {
       await this.broadcast(`[MineOps] Server restart initiated by ${actor}. Temporary lag may occur.`);
       await this.saveWorld();
       await this.statusProvider.execMinecraftConsole('save-off');
+      let query = { available: false };
       try {
         await this.statusProvider.restartMinecraft();
         await this.statusProvider.waitForMinecraftReady({ timeoutMs: this.config.lifecycle.readinessTimeoutMs });
-        await this.waitForQueryReady();
+        query = await this.checkQueryReady({ operation: 'restart' });
       } finally {
         try { await this.statusProvider.execMinecraftConsole('save-on'); } catch (error) { this.logger?.warn('save-on after restart failed', { error: error.message }); }
       }
       this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: null });
       this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Server Restarted' });
+      if (!query.available) {
+        return {
+          changed: true,
+          state: 'RUNNING',
+          warning: true,
+          title: 'Minecraft Restarted',
+          message: 'Server pod is ready, but player query did not respond yet. Status may catch up shortly.',
+        };
+      }
       return { changed: true, state: 'RUNNING', title: 'Minecraft Restarted', message: 'Server is ready for players.' };
     });
   }
 
   async evaluateIdleShutdown() {
-    if (!this.config.lifecycle.idleShutdownEnabled) return;
-    const maintenance = this.stateStore.getMaintenance();
-    if (maintenance.enabled) return;
-    if (this.lockService.current()) return;
+    if (this.idleEvaluationInProgress) return;
+    this.idleEvaluationInProgress = true;
+    try {
+      if (!this.config.lifecycle.idleShutdownEnabled) return;
+      const maintenance = this.stateStore.getMaintenance();
+      if (maintenance.enabled) return;
+      if (this.lockService.current()) return;
 
-    const backup = await this.statusProvider.getBackupInfo();
-    if (backup.backupRunning) return;
+      const backup = await this.statusProvider.getBackupInfo();
+      if (backup.backupRunning) return;
 
-    const status = await this.statusProvider.getStatus();
-    if (!status.running) {
-      this.stateStore.setLifecycleState({ state: 'STOPPED', idleStartedAt: null });
-      return;
-    }
+      const status = await this.statusProvider.getStatus();
+      if (!status.running) {
+        this.stateStore.setLifecycleState({ state: 'STOPPED', idleStartedAt: null });
+        return;
+      }
 
-    const players = await this.playerProvider.getPlayers();
-    const online = players.available ? players.onlineCount ?? 0 : 1;
-    const lifecycle = this.stateStore.getLifecycleState();
-    if (online > 0) {
-      if (lifecycle.idleStartedAt) this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Idle Timeout Cancelled' });
-      this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: null });
-      return;
-    }
+      const players = await this.playerProvider.getPlayers();
+      const online = players.available ? players.onlineCount ?? 0 : 1;
+      const lifecycle = this.stateStore.getLifecycleState();
+      if (online > 0) {
+        if (lifecycle.idleStartedAt) this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Idle Timeout Cancelled' });
+        this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: null });
+        return;
+      }
 
-    if (!lifecycle.idleStartedAt) {
-      this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: new Date().toISOString() });
-      this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Idle Timeout Started' });
-      return;
-    }
+      if (!lifecycle.idleStartedAt) {
+        this.stateStore.setLifecycleState({ state: 'RUNNING', idleStartedAt: localTimestamp() });
+        this.stateStore.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'Idle Timeout Started' });
+        return;
+      }
 
-    const idleMs = Date.now() - new Date(lifecycle.idleStartedAt).getTime();
-    if (idleMs >= this.config.lifecycle.idleShutdownMinutes * 60000) {
-      await this.stopServer({ actor: 'Idle shutdown', warn: false });
+      const idleMs = Date.now() - parseTimestamp(lifecycle.idleStartedAt).getTime();
+      if (idleMs >= this.config.lifecycle.idleShutdownMinutes * 60000) {
+        await this.stopServer({ actor: 'Idle shutdown', warn: false });
+      }
+    } finally {
+      this.idleEvaluationInProgress = false;
     }
   }
 

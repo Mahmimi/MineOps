@@ -30,22 +30,23 @@ function Resolve-BackupPath {
     throw "Backup root does not exist: $Root"
   }
 
-  if ($Name -eq "latest") {
-    $latestPath = Join-Path $Root "latest"
-    if (Test-Path -LiteralPath $latestPath -PathType Container) {
-      return (Resolve-Path -LiteralPath $latestPath).Path
+  $backupDirectories = Get-ChildItem -LiteralPath $Root -Directory |
+    Where-Object {
+      $_.Name -eq "latest" -or
+      $_.Name -match '^backup_\d{4}-\d{2}-\d{2}_\d{1,2}-\d{2}-\d{2}$' -or
+      $_.Name -match '^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$'
     }
 
-    $latestTimestamp = Get-ChildItem -LiteralPath $Root -Directory |
-      Where-Object { $_.Name -match '^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}$' } |
-      Sort-Object Name -Descending |
+  if ($Name -eq "latest") {
+    $latestBackup = $backupDirectories |
+      Sort-Object LastWriteTimeUtc -Descending |
       Select-Object -First 1
 
-    if ($null -eq $latestTimestamp) {
-      throw "No timestamped backups found under: $Root"
+    if ($null -eq $latestBackup) {
+      throw "No backups found under: $Root"
     }
 
-    return $latestTimestamp.FullName
+    return $latestBackup.FullName
   }
 
   $path = Join-Path $Root $Name

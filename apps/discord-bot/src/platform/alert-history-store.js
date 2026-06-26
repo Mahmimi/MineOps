@@ -1,5 +1,6 @@
-﻿import fs from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
+import { localTimestamp } from '../../../utils/time.js';
 
 export class AlertHistoryStore {
   constructor({ directory = '/app/data/alerts', logger }) {
@@ -16,7 +17,7 @@ export class AlertHistoryStore {
     try {
       this.ensureDirectory();
       const payload = {
-        timestamp: new Date().toISOString(),
+        timestamp: localTimestamp(),
         type: record.type,
         severity: record.severity ?? 'INFO',
         message: record.message,

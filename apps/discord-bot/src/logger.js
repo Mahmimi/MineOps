@@ -1,3 +1,5 @@
+import { localTimestamp } from '../../utils/time.js';
+
 const LEVELS = {
   debug: 10,
   info: 20,
@@ -12,7 +14,7 @@ export function createLogger({ serviceName, level = 'info' }) {
     if ((LEVELS[severity] ?? LEVELS.info) < threshold) return;
 
     const entry = {
-      timestamp: new Date().toISOString(),
+      timestamp: localTimestamp(),
       severity,
       service: serviceName,
       message,

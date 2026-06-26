@@ -1,5 +1,6 @@
 import { header, print } from '../ui/printer.js';
 import { green, red } from '../ui/theme.js';
+import { localCompactTimestamp } from '../../../utils/time.js';
 
 export const backupCommand = {
   name: 'backup',
@@ -7,8 +8,11 @@ export const backupCommand = {
   usage: 'mineops backup',
   examples: ['mineops backup'],
   execute({ services, constants }) {
-    const name = `mineops-manual-backup-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}`;
+    const name = `mineops-manual-backup-${localCompactTimestamp()}`;
     header('Backup Started');
+    const reconcile = services.deploymentManager.reconcileBackupRuntime();
+    print(reconcile.message);
+    print('');
     services.data.appendEvent({ type: 'backup', severity: 'INFO', message: 'Backup started' });
     services.runner.run('kubectl', ['create', 'job', '-n', constants.namespace, name, '--from=cronjob/minecraft-backup']);
     const wait = services.runner.run('kubectl', ['wait', '-n', constants.namespace, '--for=condition=complete', `job/${name}`, '--timeout=300s'], { allowFailure: true });

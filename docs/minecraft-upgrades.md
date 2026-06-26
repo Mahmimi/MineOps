@@ -1,6 +1,6 @@
 # Minecraft Upgrades
 
-MineOps upgrades are configuration-driven.
+MineOps upgrades are explicit operator actions. Terraform creates the initial Minecraft runtime from `config/minecraft.yaml`, but later deploys intentionally preserve the existing Minecraft pod template so routine platform deploys do not roll the server back or rewrite runtime metadata.
 
 ## Command
 
@@ -22,15 +22,14 @@ The command:
 1. Validates the target version.
 2. Creates a backup.
 3. Patches `config/minecraft.yaml`.
-4. Applies Terraform.
-5. Restarts Minecraft.
-6. Waits for readiness.
-7. Checks runtime config drift.
-8. Emits a lifecycle event.
+4. Patches the live Minecraft Deployment `VERSION` environment variable.
+5. Waits for rollout when Minecraft is running.
+6. Checks runtime config drift.
+7. Emits a lifecycle event.
 
 ## Idempotency
 
-If the requested version already matches `config/minecraft.yaml`, MineOps exits without backup, Terraform, or restart.
+If the requested version already matches the live Minecraft Deployment, MineOps exits without backup or rollout. If only `config/minecraft.yaml` is stale, MineOps syncs the file without touching the running server.
 
 ## Rollback
 
@@ -41,6 +40,5 @@ If the upgrade fails:
 3. Run:
 
 ```powershell
-terraform -chdir=infra/terraform apply
-.\mineops.ps1 restart minecraft
+.\mineops.ps1 update minecraft <previous-version>
 ```
