@@ -12,6 +12,7 @@ locals {
   cfg_operators = try(local.minecraft_config.operators, [])
 
   cfg_storage_size             = try(local.cfg_storage.size, var.minecraft_storage_size)
+  cfg_storage_host_path        = try(local.cfg_storage.hostPath, var.minecraft_host_path)
   cfg_minecraft_type           = try(local.cfg_minecraft.type, var.minecraft_type)
   cfg_minecraft_version        = try(local.cfg_minecraft.version, var.minecraft_version)
   cfg_minecraft_memory         = try(local.cfg_server.memory, var.minecraft_memory)

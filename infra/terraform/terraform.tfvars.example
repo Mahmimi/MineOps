@@ -16,6 +16,6 @@ playit_secret_value = "replace-with-non-production-playit-secret"
 
 backup_enabled   = true
 backup_schedule  = "*/30 * * * *"
-backup_mode      = "append_with_limit"
+backup_mode      = "append"
 backup_limit     = 5
 backup_host_path = "./backups"

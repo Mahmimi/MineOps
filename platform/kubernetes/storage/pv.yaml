@@ -1,18 +1,19 @@
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: PersistentVolume
 metadata:
-  name: minecraft-data
-  namespace: mineops
+  name: mineops-minecraft-data
   labels:
     app.kubernetes.io/name: minecraft
     app.kubernetes.io/component: game-server
     app.kubernetes.io/part-of: mineops
     app.kubernetes.io/managed-by: manifest
 spec:
+  capacity:
+    storage: 20Gi
   accessModes:
     - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
   storageClassName: mineops-hostpath
-  volumeName: mineops-minecraft-data
-  resources:
-    requests:
-      storage: 20Gi
+  hostPath:
+    path: /var/lib/rancher/k3s/storage/mineops-minecraft-data
+    type: DirectoryOrCreate

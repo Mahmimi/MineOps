@@ -40,6 +40,12 @@ variable "minecraft_storage_size" {
   default     = "20Gi"
 }
 
+variable "minecraft_host_path" {
+  description = "Stable path inside the k3d node for Minecraft data. This path is backed by MINEOPS_STORAGE_PATH on the host."
+  type        = string
+  default     = "/var/lib/rancher/k3s/storage/mineops-minecraft-data"
+}
+
 variable "minecraft_memory" {
   description = "Minecraft JVM memory setting passed to the container."
   type        = string
@@ -182,7 +188,7 @@ variable "backup_schedule" {
 variable "backup_mode" {
   description = "Backup retention mode: replace, append, or append_with_limit."
   type        = string
-  default     = "append_with_limit"
+  default     = "append"
 
   validation {
     condition     = contains(["replace", "append", "append_with_limit"], var.backup_mode)

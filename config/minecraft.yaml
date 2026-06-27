@@ -18,7 +18,7 @@ operators:
 backup:
   enabled: true
   interval: "*/30 * * * *"
-  mode: append_with_limit
+  mode: append
   limit: 5
 
 storage:

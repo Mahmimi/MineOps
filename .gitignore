@@ -15,6 +15,9 @@
 *.dat
 *.dat_old
 
+# Recovery preservation copies
+/recovery/
+
 # Root backup skeleton
 /backups/*
 !/backups/.gitkeep

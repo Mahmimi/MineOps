@@ -28,6 +28,43 @@ resource "kubernetes_namespace_v1" "mineops" {
   }
 }
 
+resource "kubernetes_persistent_volume_v1" "minecraft_data" {
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = [
+      spec[0].capacity,
+    ]
+  }
+
+  metadata {
+    name = "mineops-minecraft-data"
+
+    labels = local.minecraft_labels
+  }
+
+  spec {
+    access_modes                     = ["ReadWriteOnce"]
+    persistent_volume_reclaim_policy = "Retain"
+    storage_class_name               = "mineops-hostpath"
+
+    capacity = {
+      storage = local.cfg_storage_size
+    }
+
+    claim_ref {
+      name      = "minecraft-data"
+      namespace = kubernetes_namespace_v1.mineops.metadata[0].name
+    }
+
+    persistent_volume_source {
+      host_path {
+        path = local.cfg_storage_host_path
+        type = "DirectoryOrCreate"
+      }
+    }
+  }
+}
+
 resource "kubernetes_persistent_volume_claim_v1" "minecraft_data" {
   wait_until_bound = false
 
@@ -46,7 +83,9 @@ resource "kubernetes_persistent_volume_claim_v1" "minecraft_data" {
   }
 
   spec {
-    access_modes = ["ReadWriteOnce"]
+    access_modes       = ["ReadWriteOnce"]
+    storage_class_name = "mineops-hostpath"
+    volume_name        = kubernetes_persistent_volume_v1.minecraft_data.metadata[0].name
 
     resources {
       requests = {
