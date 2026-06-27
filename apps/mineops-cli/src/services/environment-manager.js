@@ -3,11 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export class EnvironmentManager {
-  constructor({ runner, scriptPath, namespace, statePath }) {
+  constructor({ runner, scriptPath, namespace, statePath, envPath = null }) {
     this.runner = runner;
     this.scriptPath = scriptPath;
     this.namespace = namespace;
     this.statePath = statePath;
+    this.envPath = envPath;
   }
 
   ensureHostDirectories(env) {
@@ -17,23 +18,23 @@ export class EnvironmentManager {
     return { changed: !existed, message: 'Host storage directories are ready' };
   }
 
-  runtimeFingerprint() {
-    const root = path.dirname(path.dirname(this.scriptPath));
+  runtimeFingerprint(mineopsConfig) {
     const hash = crypto.createHash('sha256');
-    for (const file of ['.env', 'mineops-admins.json']) {
-      const filePath = path.join(root, file);
-      hash.update(file);
-      hash.update('\0');
-      if (fs.existsSync(filePath)) hash.update(fs.readFileSync(filePath));
-      hash.update('\0');
-    }
+    hash.update('.env');
+    hash.update('\0');
+    hash.update(mineopsConfig.globals.raw.env ?? '');
+    hash.update('\0');
+    hash.update('mineops-admins.json');
+    hash.update('\0');
+    hash.update(mineopsConfig.globals.raw.admins ?? '');
+    hash.update('\0');
     hash.update('derived-time-zone');
     hash.update('\0');
-    hash.update(process.env.MINEOPS_TIME_ZONE || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+    hash.update(mineopsConfig.globals.env.MINEOPS_TIME_ZONE || 'UTC');
     hash.update('\0');
     hash.update('derived-time-offset');
     hash.update('\0');
-    hash.update(String(new Date().getTimezoneOffset()));
+    hash.update(String(mineopsConfig.globals.env.MINEOPS_TIME_OFFSET_SECONDS || '0'));
     hash.update('\0');
     return hash.digest('hex');
   }
@@ -43,10 +44,12 @@ export class EnvironmentManager {
     return fs.readFileSync(this.statePath, 'utf8').trim() || null;
   }
 
-  injectRuntimeConfig() {
-    const fingerprint = this.runtimeFingerprint();
+  injectRuntimeConfig(mineopsConfig) {
+    const fingerprint = this.runtimeFingerprint(mineopsConfig);
     const previous = this.storedRuntimeFingerprint();
-    this.runner.run('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath, '-Namespace', this.namespace], { quiet: true });
+    const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath, '-Namespace', this.namespace];
+    if (this.envPath) args.push('-EnvPath', this.envPath);
+    this.runner.run('powershell', args, { quiet: true });
     fs.mkdirSync(path.dirname(this.statePath), { recursive: true });
     fs.writeFileSync(this.statePath, `${fingerprint}\n`, 'utf8');
     return {

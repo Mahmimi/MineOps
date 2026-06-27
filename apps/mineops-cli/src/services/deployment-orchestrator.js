@@ -31,14 +31,15 @@ export class DeploymentOrchestrator {
     }
   }
 
-  run({ onStep } = {}) {
+  run({ onStep, mineopsConfig = null } = {}) {
     this.onStep = onStep;
+    this.mineopsConfig = mineopsConfig;
     const steps = [];
 
     const requirements = this.runStep(
       steps,
       'Validate requirements',
-      () => this.requirementValidator.validate(),
+      () => this.requirementValidator.validate(mineopsConfig),
       { mapResult: (result) => ({ name: 'Validate requirements', status: 'OK', message: `${result.os}; ${result.commands.length} tools ready` }) },
     );
 
@@ -48,8 +49,8 @@ export class DeploymentOrchestrator {
     const imageBuild = this.runStep(steps, 'Build Docker images', () => this.imageBuilder.buildIfNeeded());
     this.runStep(steps, 'Load Docker images', () => this.imageBuilder.loadIfNeeded({ force: imageBuild.changed || cluster.changed }));
 
-    const infrastructure = this.runStep(steps, 'Deploy Terraform resources', () => this.deploymentManager.applyInfrastructure());
-    const runtimeConfig = this.runStep(steps, 'Inject runtime configuration', () => this.environmentManager.injectRuntimeConfig());
+    const infrastructure = this.runStep(steps, 'Deploy Terraform resources', () => this.deploymentManager.applyInfrastructure(mineopsConfig));
+    const runtimeConfig = this.runStep(steps, 'Inject runtime configuration', () => this.environmentManager.injectRuntimeConfig(mineopsConfig));
     const runtimeTimeZone = this.runStep(steps, 'Apply runtime timezone', () => this.deploymentManager.ensureRuntimeTimeZone(requirements.env.MINEOPS_TIME_ZONE));
     const manifests = this.runStep(steps, 'Deploy platform manifests', () => this.deploymentManager.applyManifests());
     const shouldWaitForWorkloads = cluster.changed

@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { PlatformError } from '../domain/errors.js';
+import { generateTerraformVars } from '../config/generators/terraform-vars-generator.js';
 
 export class DeploymentManager {
   constructor({ runner, terraformPath, manifestsPath, namespace }) {
@@ -6,6 +9,16 @@ export class DeploymentManager {
     this.terraformPath = terraformPath;
     this.manifestsPath = manifestsPath;
     this.namespace = namespace;
+  }
+
+  writeTerraformVars(mineopsConfig) {
+    const varsPath = path.join(this.terraformPath, 'terraform.tfvars.json');
+    const vars = generateTerraformVars(mineopsConfig);
+    const next = ${JSON.stringify(vars, null, 2)}\\n;
+    const previous = fs.existsSync(varsPath) ? fs.readFileSync(varsPath, 'utf8') : null;
+    if (previous === next) return { changed: false, message: 'Terraform variables already generated' };
+    fs.writeFileSync(varsPath, next, 'utf8');
+    return { changed: true, message: 'Terraform variables generated' };
   }
 
   terraformPlanClean() {
@@ -36,7 +49,8 @@ export class DeploymentManager {
     return result.status === 0;
   }
 
-  applyInfrastructure() {
+  applyInfrastructure(mineopsConfig) {
+    this.writeTerraformVars(mineopsConfig);
     this.runner.run('terraform', ['init', '-input=false', '-no-color'], {
       cwd: this.terraformPath,
       quiet: true,

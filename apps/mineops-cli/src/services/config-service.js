@@ -2,85 +2,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UserInputError } from '../domain/errors.js';
 
-function parseScalar(value) {
-  const trimmed = value.trim();
-  if (trimmed === 'true') return true;
-  if (trimmed === 'false') return false;
-  if (/^\d+$/.test(trimmed)) return Number.parseInt(trimmed, 10);
-  return trimmed.replace(/^"|"$/g, '');
-}
-
 export class ConfigService {
-  constructor({ root, kubernetes, dataService, runner }) {
+  constructor({ root, kubernetes, dataService, runner, getMineOpsConfig }) {
     this.root = root;
     this.kubernetes = kubernetes;
     this.dataService = dataService;
     this.runner = runner;
+    this.getMineOpsConfig = getMineOpsConfig;
     this.configPath = path.join(root, 'config', 'minecraft.yaml');
   }
 
+  mineopsConfig() {
+    return this.getMineOpsConfig();
+  }
+
+  minecraftConfig() {
+    return this.mineopsConfig().defaultInstance()?.legacy.minecraft ?? {};
+  }
+
   readRaw() {
-    return fs.readFileSync(this.configPath, 'utf8');
+    return this.mineopsConfig().globals.raw.minecraft ?? '';
   }
 
   parse() {
-    const root = {};
-    let current = null;
-    let currentList = null;
-    for (const line of this.readRaw().split(/\r?\n/)) {
-      if (!line.trim() || line.trim().startsWith('#')) continue;
-      const section = line.match(/^([A-Za-z0-9_-]+):\s*$/);
-      if (section) {
-        current = section[1];
-        root[current] = root[current] ?? {};
-        currentList = null;
-        continue;
-      }
-      const listItem = line.match(/^\s+-\s+(.+)$/);
-      if (listItem && current) {
-        if (!Array.isArray(root[current])) root[current] = [];
-        root[current].push(parseScalar(listItem[1]));
-        currentList = current;
-        continue;
-      }
-      const nestedSection = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*$/);
-      if (nestedSection && current) {
-        root[current][nestedSection[1]] = {};
-        currentList = nestedSection[1];
-        continue;
-      }
-      const keyValue = line.match(/^\s{2}([A-Za-z0-9_-]+):\s*(.*)$/);
-      if (keyValue && current) {
-        root[current][keyValue[1]] = parseScalar(keyValue[2]);
-        continue;
-      }
-      const deepKeyValue = line.match(/^\s{4}([A-Za-z0-9_-]+):\s*(.*)$/);
-      if (deepKeyValue && current && currentList) {
-        root[current][currentList][deepKeyValue[1]] = parseScalar(deepKeyValue[2]);
-      }
-    }
-    return root;
+    return this.minecraftConfig();
   }
 
   validate() {
-    const config = this.parse();
-    const required = [
-      ['minecraft.type', config.minecraft?.type],
-      ['minecraft.version', config.minecraft?.version],
-      ['world.difficulty', config.world?.difficulty],
-      ['world.mode', config.world?.mode],
-      ['server.memory', config.server?.memory],
-      ['server.maxPlayers', config.server?.maxPlayers],
-      ['backup.enabled', config.backup?.enabled],
-      ['backup.interval', config.backup?.interval],
-      ['backup.mode', config.backup?.mode],
-    ];
-    const missing = required.filter(([, value]) => value === undefined || value === '').map(([key]) => key);
-    if (missing.length > 0) throw new UserInputError(`Missing required config values: ${missing.join(', ')}`, { usage: 'mineops validate' });
-    if (!['replace', 'append', 'append_with_limit'].includes(config.backup.mode)) {
-      throw new UserInputError('backup.mode must be replace, append, or append_with_limit', { usage: 'mineops validate' });
-    }
-    return config;
+    return this.parse();
   }
 
   setMinecraftVersion(version) {

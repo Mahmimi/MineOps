@@ -18,7 +18,9 @@ export const clusterCommand = {
     if (action === 'recreate') {
       await this.execute({ args: ['delete'], services });
       header('Recreating MineOps Cluster');
-      services.clusterManager.ensure({ env: services.env.load({ optional: true }) });
+      const mineopsConfig = services.loadMineOpsConfig();
+      services.runner.setBaseEnv(mineopsConfig.globals.env);
+      services.clusterManager.ensure({ env: mineopsConfig.globals.env });
       print('Next: run mineops init');
       return;
     }

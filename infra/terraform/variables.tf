@@ -75,6 +75,29 @@ variable "minecraft_seed" {
   type        = string
   default     = "5063885805507972583"
 }
+variable "minecraft_online_mode" {
+  description = "Whether Minecraft online mode is enabled."
+  type        = bool
+  default     = true
+}
+
+variable "minecraft_max_players" {
+  description = "Maximum number of Minecraft players."
+  type        = number
+  default     = 20
+}
+
+variable "minecraft_difficulty" {
+  description = "Minecraft world difficulty."
+  type        = string
+  default     = "normal"
+}
+
+variable "minecraft_mode" {
+  description = "Minecraft game mode."
+  type        = string
+  default     = "survival"
+}
 
 variable "minecraft_service_type" {
   description = "Service type for Minecraft traffic on k3d."

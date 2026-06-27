@@ -27,7 +27,9 @@ export const initCommand = {
   examples: ['mineops init'],
   execute({ services }) {
     header('Initializing MineOps');
-    const report = services.deployment.run({ onStep: printStep });
+    const mineopsConfig = services.loadMineOpsConfig();
+    services.runner.setBaseEnv(mineopsConfig.globals.env);
+    const report = services.deployment.run({ onStep: printStep, mineopsConfig });
 
     print('');
     print('Deployment Summary');
