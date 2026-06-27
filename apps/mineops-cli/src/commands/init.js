@@ -20,6 +20,14 @@ function printStep(event) {
   }
 }
 
+function printInstanceSummary(instance) {
+  print(`${instance.name} (${instance.namespace})`);
+  print(`  Minecraft: ${instance.minecraft.state} (${instance.minecraft.ready ?? 0}/${instance.minecraft.desired ?? 0})`);
+  print(`  Playit: ${instance.playit.publicReady ? 'READY' : instance.playit.reason}`);
+  print(`  Discord Bot: ${instance.discord.state} (${instance.discord.ready ?? 0}/${instance.discord.desired ?? 0})`);
+  print(`  Backup CronJob: ${instance.backupCronJobReady ? 'READY' : 'MISSING'}`);
+}
+
 export const initCommand = {
   name: 'init',
   description: 'Initialize or reconcile the MineOps platform.',
@@ -33,10 +41,14 @@ export const initCommand = {
 
     print('');
     print('Deployment Summary');
-    print(`Minecraft: ${report.health.minecraft.state} (${report.health.minecraft.ready ?? 0}/${report.health.minecraft.desired ?? 0})`);
-    print(`Playit: ${report.health.playit.publicReady ? 'READY' : report.health.playit.reason}`);
-    print(`Discord Bot: ${report.health.discord.state} (${report.health.discord.ready ?? 0}/${report.health.discord.desired ?? 0})`);
-    print(`Backup CronJob: ${report.health.backupCronJobReady ? 'READY' : 'MISSING'}`);
+    if (report.health.instances?.length > 1) {
+      for (const instance of report.health.instances) printInstanceSummary(instance);
+    } else {
+      print(`Minecraft: ${report.health.minecraft.state} (${report.health.minecraft.ready ?? 0}/${report.health.minecraft.desired ?? 0})`);
+      print(`Playit: ${report.health.playit.publicReady ? 'READY' : report.health.playit.reason}`);
+      print(`Discord Bot: ${report.health.discord.state} (${report.health.discord.ready ?? 0}/${report.health.discord.desired ?? 0})`);
+      print(`Backup CronJob: ${report.health.backupCronJobReady ? 'READY' : 'MISSING'}`);
+    }
 
     if (!report.health.healthy) {
       fail('MineOps initialized with warnings');

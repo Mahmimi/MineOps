@@ -10,12 +10,12 @@ export class KubernetesAdapter {
     return JSON.parse(result.stdout);
   }
 
-  getDeployment(name) {
-    return this.json(['get', 'deployment', name, '-n', this.namespace]);
+  getDeployment(name, namespace = this.namespace) {
+    return this.json(['get', 'deployment', name, '-n', namespace]);
   }
 
-  deploymentState(name) {
-    const deploy = this.getDeployment(name);
+  deploymentState(name, namespace = this.namespace) {
+    const deploy = this.getDeployment(name, namespace);
     if (!deploy) return { state: 'MISSING', ready: 0, desired: 0 };
     const desired = deploy.spec?.replicas ?? 0;
     const ready = deploy.status?.readyReplicas ?? 0;
@@ -24,16 +24,16 @@ export class KubernetesAdapter {
     return { state: ready >= desired && available >= desired ? 'ONLINE' : 'DEGRADED', ready, desired, available };
   }
 
-  endpointCount(name) {
-    const endpoints = this.json(['get', 'endpoints', name, '-n', this.namespace], { fallback: null });
+  endpointCount(name, namespace = this.namespace) {
+    const endpoints = this.json(['get', 'endpoints', name, '-n', namespace], { fallback: null });
     return (endpoints?.subsets ?? [])
       .flatMap((subset) => subset.addresses ?? [])
       .length;
   }
 
-  playitState() {
-    const agent = this.deploymentState('playit');
-    const minecraftEndpointCount = this.endpointCount('minecraft');
+  playitState(namespace = this.namespace) {
+    const agent = this.deploymentState('playit', namespace);
+    const minecraftEndpointCount = this.endpointCount('minecraft', namespace);
     const minecraftEndpointsReady = minecraftEndpointCount > 0;
     return {
       ...agent,
@@ -61,19 +61,19 @@ export class KubernetesAdapter {
     return this.json(['get', 'jobs', '-n', this.namespace, '-l', 'app.kubernetes.io/name=minecraft-backup'], { fallback: { items: [] } })?.items ?? [];
   }
 
-  cronJob(name) {
-    return this.json(['get', 'cronjob', name, '-n', this.namespace]);
+  cronJob(name, namespace = this.namespace) {
+    return this.json(['get', 'cronjob', name, '-n', namespace]);
   }
 
-  pvc(name) {
-    return this.json(['get', 'pvc', name, '-n', this.namespace]);
+  pvc(name, namespace = this.namespace) {
+    return this.json(['get', 'pvc', name, '-n', namespace]);
   }
 
-  service(name) {
-    return this.json(['get', 'service', name, '-n', this.namespace]);
+  service(name, namespace = this.namespace) {
+    return this.json(['get', 'service', name, '-n', namespace]);
   }
 
-  secret(name) {
-    return this.json(['get', 'secret', name, '-n', this.namespace]);
+  secret(name, namespace = this.namespace) {
+    return this.json(['get', 'secret', name, '-n', namespace]);
   }
 }

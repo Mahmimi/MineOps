@@ -62,32 +62,32 @@ export class ImageBuilder {
     return { changed: true, fingerprint, message: 'Discord bot image built' };
   }
 
-  clusterNodeNames() {
+  clusterNodeNames(clusterName = this.clusterName) {
     const result = this.runner.run('docker', ['ps', '--format', '{{.Names}}'], { capture: true, allowFailure: true });
-    return result.stdout.split(/\r?\n/).filter((name) => new RegExp(`^k3d-${this.clusterName}-(server|agent)-`).test(name));
+    return result.stdout.split(/\r?\n/).filter((name) => new RegExp(`^k3d-${clusterName}-(server|agent)-`).test(name));
   }
 
-  imageLoadedInCluster() {
-    const nodes = this.clusterNodeNames();
+  imageLoadedInCluster(clusterName = this.clusterName) {
+    const nodes = this.clusterNodeNames(clusterName);
     if (nodes.length === 0) return false;
     const imageRef = `docker.io/library/${this.image}`;
     return nodes.every((node) => this.runner.run('docker', ['exec', node, 'crictl', 'images', '-q', imageRef], { capture: true, allowFailure: true }).stdout.trim());
   }
 
-  removeClusterImage() {
+  removeClusterImage(clusterName = this.clusterName) {
     const imageRef = `docker.io/library/${this.image}`;
-    for (const node of this.clusterNodeNames()) {
+    for (const node of this.clusterNodeNames(clusterName)) {
       this.runner.run('docker', ['exec', node, 'crictl', 'rmi', imageRef], { quiet: true, allowFailure: true });
     }
   }
 
-  loadIfNeeded({ force = false } = {}) {
-    if (!force && this.imageLoadedInCluster()) {
+  loadIfNeeded({ force = false, clusterName = this.clusterName } = {}) {
+    if (!force && this.imageLoadedInCluster(clusterName)) {
       return { changed: false, message: 'Discord bot image already loaded in cluster' };
     }
 
-    if (force) this.removeClusterImage();
-    this.runner.run('k3d', ['image', 'import', this.image, '-c', this.clusterName], { quiet: true });
+    if (force) this.removeClusterImage(clusterName);
+    this.runner.run('k3d', ['image', 'import', this.image, '-c', clusterName], { quiet: true });
     return { changed: true, message: 'Discord bot image loaded into cluster' };
   }
 }

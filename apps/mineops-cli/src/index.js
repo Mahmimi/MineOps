@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRegistry } from './commands/registry.js';
 import { LegacyConfigAdapter } from './config/adapters/legacy-config-adapter.js';
+import { MineOpsYamlAdapter } from './config/adapters/mineops-yaml-adapter.js';
 import { loadMineOpsConfig } from './config/load-mineops-config.js';
 import { PlatformError, UserInputError } from './domain/errors.js';
 import { localTimestamp } from '../../utils/time.js';
@@ -47,6 +48,8 @@ const paths = {
   discordManifests: () => path.join(root, 'platform', 'kubernetes', 'discord-bot'),
   imageFingerprint: () => path.join(root, '.mineops', 'discord-bot-image.sha256'),
   runtimeFingerprint: () => path.join(root, '.mineops', 'runtime-config.sha256'),
+  runtimeConfigArtifact: () => path.join(root, '.mineops', 'runtime', 'runtime-config.json'),
+  generated: () => path.join(root, '.mineops'),
 };
 
 function formatBytes(bytes) {
@@ -64,6 +67,11 @@ function createServices() {
     clusterName: constants.cluster,
     envPath: env.envPath,
   });
+  const yamlConfigAdapter = new MineOpsYamlAdapter({
+    root,
+    configPath: process.env.MINEOPS_CONFIG_PATH || path.join(root, 'mineops.yaml'),
+  });
+  const configAdapter = yamlConfigAdapter.detect() ? yamlConfigAdapter : legacyConfigAdapter;
   const runner = new ProcessRunner({ cwd: root });
   const kubernetes = new KubernetesAdapter({ runner, namespace: constants.namespace });
   const data = new DataService({ runner, namespace: constants.namespace });
@@ -73,19 +81,19 @@ function createServices() {
     kubernetes,
     dataService: data,
     runner,
-    getMineOpsConfig: () => loadMineOpsConfig({ adapter: legacyConfigAdapter }),
+    getMineOpsConfig: () => loadMineOpsConfig({ adapter: configAdapter }),
   });
   const platform = new PlatformService({ kubernetes, runner, backupService: backups, dataService: data });
   const operations = new OperationService({ runner, namespace: constants.namespace, dataService: data });
   const worldImport = new WorldImportService({ runner, kubernetes, dataService: data, namespace: constants.namespace });
   const requirementValidator = new RequirementValidator({ runner });
-  const clusterManager = new ClusterManager({ runner, clusterName: constants.cluster, k3dConfigPath: paths.k3dConfig() });
+  const clusterManager = new ClusterManager({ runner, clusterName: constants.cluster, k3dConfigPath: paths.k3dConfig(), generatedRoot: paths.generated() });
   const environmentManager = new EnvironmentManager({
     runner,
     scriptPath: paths.script('bootstrap-secrets.ps1'),
     namespace: constants.namespace,
     statePath: paths.runtimeFingerprint(),
-    envPath: env.envPath,
+    runtimeConfigPath: paths.runtimeConfigArtifact(),
   });
   const imageBuilder = new ImageBuilder({
     runner,
@@ -102,6 +110,8 @@ function createServices() {
     terraformPath: paths.terraform(),
     manifestsPath: paths.discordManifests(),
     namespace: constants.namespace,
+    generatedRoot: paths.generated(),
+    botImage: constants.botImage,
   });
   const healthChecker = new HealthChecker({ kubernetes });
   const deployment = new DeploymentOrchestrator({
@@ -115,7 +125,7 @@ function createServices() {
   });
   return {
     env,
-    loadMineOpsConfig: () => loadMineOpsConfig({ adapter: legacyConfigAdapter }),
+    loadMineOpsConfig: () => loadMineOpsConfig({ adapter: configAdapter }),
     runner,
     kubernetes,
     data,

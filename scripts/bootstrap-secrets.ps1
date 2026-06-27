@@ -1,117 +1,116 @@
-﻿param(
-  [string]$EnvPath = (Join-Path (Split-Path -Parent $PSScriptRoot) ".env"),
-  [string]$Namespace = "mineops"
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$RuntimeConfigPath,
+
+  [string]$Namespace = ""
 )
 
 $ErrorActionPreference = "Stop"
-
-function Read-DotEnv {
-  param([string]$Path)
-
-  if (-not (Test-Path -LiteralPath $Path)) {
-    throw "Environment file not found: $Path"
-  }
-
-  $values = @{}
-  foreach ($line in Get-Content -LiteralPath $Path) {
-    $trimmed = $line.Trim()
-    if ($trimmed -eq "" -or $trimmed.StartsWith("#")) {
-      continue
-    }
-
-    $separator = $trimmed.IndexOf("=")
-    if ($separator -lt 1) {
-      continue
-    }
-
-    $key = $trimmed.Substring(0, $separator).Trim()
-    $value = $trimmed.Substring($separator + 1).Trim()
-
-    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
-      $value = $value.Substring(1, $value.Length - 2)
-    }
-
-    $values[$key] = $value
-  }
-
-  return $values
-}
-
-function Require-EnvValue {
-  param(
-    [hashtable]$Values,
-    [string]$Name
-  )
-
-  if (-not $Values.ContainsKey($Name) -or [string]::IsNullOrWhiteSpace($Values[$Name])) {
-    throw "Missing required value in .env: $Name"
-  }
-
-  return $Values[$Name]
-}
 
 if (-not (Get-Command kubectl -ErrorAction SilentlyContinue)) {
   throw "kubectl was not found in PATH."
 }
 
-$envValues = Read-DotEnv -Path $EnvPath
-
-$discordToken = Require-EnvValue -Values $envValues -Name "DISCORD_TOKEN"
-$discordClientId = Require-EnvValue -Values $envValues -Name "DISCORD_CLIENT_ID"
-$discordGuildId = Require-EnvValue -Values $envValues -Name "DISCORD_GUILD_ID"
-$discordAlertChannelId = if ($envValues.ContainsKey("DISCORD_ALERT_CHANNEL_ID")) { $envValues["DISCORD_ALERT_CHANNEL_ID"] } else { "" }
-$playitSecretKey = Require-EnvValue -Values $envValues -Name "PLAYIT_SECRET_KEY"
-$playitJoinAddress = if ($envValues.ContainsKey("PLAYIT_JOIN_ADDRESS")) { $envValues["PLAYIT_JOIN_ADDRESS"] } else { "" }
-$mineopsTimeZone = if ($envValues.ContainsKey("MINEOPS_TIME_ZONE") -and -not [string]::IsNullOrWhiteSpace($envValues["MINEOPS_TIME_ZONE"])) {
-  $envValues["MINEOPS_TIME_ZONE"]
-} elseif (-not [string]::IsNullOrWhiteSpace($env:MINEOPS_TIME_ZONE)) {
-  $env:MINEOPS_TIME_ZONE
-} else {
-  [System.TimeZoneInfo]::Local.Id
+if (-not (Test-Path -LiteralPath $RuntimeConfigPath)) {
+  throw "Runtime config artifact not found: $RuntimeConfigPath"
 }
-$mineopsTimeOffsetSeconds = if (-not [string]::IsNullOrWhiteSpace($env:MINEOPS_TIME_OFFSET_SECONDS)) {
-  $env:MINEOPS_TIME_OFFSET_SECONDS
-} else {
-  [int][System.TimeZoneInfo]::Local.GetUtcOffset([DateTimeOffset]::Now).TotalSeconds
-}
-$idleShutdownEnabled = if ($envValues.ContainsKey("IDLE_SHUTDOWN_ENABLED") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_ENABLED"])) { $envValues["IDLE_SHUTDOWN_ENABLED"] } else { "true" }
-$idleShutdownMinutes = if ($envValues.ContainsKey("IDLE_SHUTDOWN_MINUTES") -and -not [string]::IsNullOrWhiteSpace($envValues["IDLE_SHUTDOWN_MINUTES"])) { $envValues["IDLE_SHUTDOWN_MINUTES"] } else { "30" }
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$adminConfigPath = Join-Path $repoRoot "mineops-admins.json"
 
-Write-Host "Bootstrapping MineOps runtime Secrets in namespace '$Namespace'."
+$artifact = Get-Content -LiteralPath $RuntimeConfigPath -Raw | ConvertFrom-Json
+$targetNamespace = if (-not [string]::IsNullOrWhiteSpace($Namespace)) {
+  $Namespace
+} elseif (-not [string]::IsNullOrWhiteSpace($artifact.namespace)) {
+  $artifact.namespace
+} else {
+  "mineops"
+}
+
+function Get-LiteralArgs {
+  param([object]$Data)
+
+  $literalArgs = @()
+  if ($null -eq $Data) {
+    return $literalArgs
+  }
+
+  foreach ($property in $Data.PSObject.Properties) {
+    $literalArgs += "--from-literal=$($property.Name)=$($property.Value)"
+  }
+
+  return $literalArgs
+}
+
+function Apply-Labels {
+  param(
+    [string]$ResourceKind,
+    [string]$ResourceName,
+    [object]$Labels
+  )
+
+  if ($null -eq $Labels) {
+    return
+  }
+
+  $labelArgs = @()
+  foreach ($property in $Labels.PSObject.Properties) {
+    if (-not [string]::IsNullOrWhiteSpace($property.Name)) {
+      $labelArgs += "$($property.Name)=$($property.Value)"
+    }
+  }
+
+  if ($labelArgs.Count -eq 0) {
+    return
+  }
+
+  kubectl label $ResourceKind $ResourceName -n $targetNamespace @labelArgs --overwrite | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to label $ResourceKind artifact: $ResourceName"
+  }
+}
+Write-Host "Bootstrapping MineOps runtime artifacts in namespace '$targetNamespace'."
 Write-Host "Secret values are not printed."
 
-kubectl create secret generic discord-bot-secret `
-  -n $Namespace `
-  --from-literal=token="$discordToken" `
-  --from-literal=client-id="$discordClientId" `
-  --from-literal=guild-id="$discordGuildId" `
-  --from-literal=alert-channel-id="$discordAlertChannelId" `
-  --dry-run=client -o yaml | kubectl apply -f -
+foreach ($secret in @($artifact.secrets)) {
+  if ([string]::IsNullOrWhiteSpace($secret.name)) {
+    throw "Runtime secret artifact is missing a name."
+  }
 
-kubectl create secret generic playit-secret `
-  -n $Namespace `
-  --from-literal=secret-key="$playitSecretKey" `
-  --dry-run=client -o yaml | kubectl apply -f -
+  $renderArgs = @("create", "secret", "generic", $secret.name, "-n", $targetNamespace) + (Get-LiteralArgs -Data $secret.data) + @("--dry-run=client", "-o", "yaml")
 
-kubectl create configmap mineops-runtime-config `
-  -n $Namespace `
-  --from-literal=PLAYIT_JOIN_ADDRESS="$playitJoinAddress" `
-  --from-literal=MINEOPS_TIME_ZONE="$mineopsTimeZone" `
-  --from-literal=MINEOPS_TIME_OFFSET_SECONDS="$mineopsTimeOffsetSeconds" `
-  --from-literal=IDLE_SHUTDOWN_ENABLED="$idleShutdownEnabled" `
-  --from-literal=IDLE_SHUTDOWN_MINUTES="$idleShutdownMinutes" `
-  --dry-run=client -o yaml | kubectl apply -f -
-
-if (Test-Path -LiteralPath $adminConfigPath) {
-  kubectl create configmap mineops-admins `
-    -n $Namespace `
-    --from-file=mineops-admins.json="$adminConfigPath" `
-    --dry-run=client -o yaml | kubectl apply -f -
-  Write-Host "MineOps admin allow-list ConfigMap is ready."
-} else {
-  Write-Host "MineOps admin allow-list not found. Copy mineops-admins.json.example to mineops-admins.json to enable admin-only Discord lifecycle commands."
+  $manifest = kubectl @renderArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to render Secret artifact: $($secret.name)"
+  }
+  $manifest | kubectl apply -f - | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to apply Secret artifact: $($secret.name)"
+  }
+  Apply-Labels -ResourceKind "secret" -ResourceName $secret.name -Labels $secret.labels
 }
 
-Write-Host "MineOps runtime Secrets are ready."
+foreach ($configMap in @($artifact.configMaps)) {
+  if ([string]::IsNullOrWhiteSpace($configMap.name)) {
+    throw "Runtime ConfigMap artifact is missing a name."
+  }
+
+  $renderArgs = @("create", "configmap", $configMap.name, "-n", $targetNamespace) + (Get-LiteralArgs -Data $configMap.data) + @("--dry-run=client", "-o", "yaml")
+
+  $manifest = kubectl @renderArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to render ConfigMap artifact: $($configMap.name)"
+  }
+  $manifest | kubectl apply -f - | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to apply ConfigMap artifact: $($configMap.name)"
+  }
+  Apply-Labels -ResourceKind "configmap" -ResourceName $configMap.name -Labels $configMap.labels
+
+  if ($configMap.name -eq "mineops-admins") {
+    Write-Host "MineOps admin allow-list ConfigMap is ready."
+  }
+}
+
+if (-not (@($artifact.configMaps) | Where-Object { $_.name -eq "mineops-admins" })) {
+  Write-Host "MineOps admin allow-list not included in runtime artifact. Copy mineops-admins.json.example to mineops-admins.json to enable admin-only Discord lifecycle commands."
+}
+
+Write-Host "MineOps runtime artifacts are ready."

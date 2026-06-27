@@ -9,6 +9,23 @@ variable "namespace" {
   type        = string
   default     = "mineops"
 }
+variable "instance_name" {
+  description = "MineOps instance name used for labels and generated unique resource names."
+  type        = string
+  default     = "default"
+}
+
+variable "minecraft_pv_name" {
+  description = "Cluster-scoped PersistentVolume name for Minecraft data."
+  type        = string
+  default     = "mineops-minecraft-data"
+}
+
+variable "backup_node_path" {
+  description = "Path inside the Kubernetes node where backups are stored. When empty, MineOps derives it from backup_host_path for backward compatibility."
+  type        = string
+  default     = ""
+}
 
 variable "mineops_time_zone" {
   description = "IANA time zone used by MineOps runtime containers for human-facing logs, events, and backup names."
