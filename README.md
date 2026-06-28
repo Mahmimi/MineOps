@@ -1,264 +1,142 @@
-# MineOps v1.0.0
+﻿# MineOps
 
-MineOps is a self-service Minecraft platform for a local Kubernetes homelab.
+<p align="center">
+<img src="https://images.steamusercontent.com/ugc/2022726727120664742/1DB762F25B451FDB4A714210F07988EBCAA8E191/?imw=512&&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false" width="50%" />
+</p>
 
-It provides:
+MineOps is a self-hosted Minecraft platform for running one or more isolated server instances on a local Kubernetes cluster.
 
-- k3d Kubernetes runtime
-- Terraform-managed Minecraft infrastructure
-- PVC-backed world storage
-- host-persistent backups
-- manual restore
-- world import
-- Discord operational bot
-- Discord server lifecycle commands
-- Playit public tunnel for player access
-- idle scale-to-zero
-- operator CLI
+It treats `mineops.yaml` as the external single source of truth, converts that input into an immutable `MineOpsConfig` domain model, generates deployment artifacts, and reconciles infrastructure deterministically.
 
-## Prerequisites
+## Features
 
-Install these tools on the host:
+- Multi-instance deployments with per-instance namespaces
+- `mineops.yaml` SSOT with environment-variable substitution
+- Instance-aware CLI commands with `--instance` and `--all`
+- Deterministic deployment through generated Terraform variables and runtime artifacts
+- Discord ChatOps for status, alerts, and guarded lifecycle actions
+- Playit tunnel integration for public player access
+- Safe backups, manual restore, and world import workflows
+- Idempotent `mineops init` reconciliation
 
-- Docker Desktop
-- k3d
-- kubectl
-- Terraform
-- Node.js 20 or newer
-- PowerShell
+## Architecture At A Glance
 
-Verify:
-
-```powershell
-docker ps
-k3d version
-kubectl version --client
-terraform version
-node --version
+```mermaid
+flowchart TD
+    A[Config files] --> B[Config adapter]
+    B --> C[Environment resolution]
+    C --> D[Fail-fast validation]
+    D --> E[Immutable MineOpsConfig]
+    E --> F[Artifact generators]
+    F --> G[Terraform vars]
+    F --> H[Runtime artifact]
+    F --> I[Discord manifest]
+    G --> J[Terraform]
+    H --> K[bootstrap-secrets.ps1]
+    I --> L[kubectl apply]
+    J --> M[Kubernetes runtime]
+    K --> M
+    L --> M
 ```
 
-## Clone
+MineOps is documented as a platform, not as a single deployment script. Start with the quick start, then use the architecture and developer guides as needed.
 
-```powershell
-git clone https://github.com/Mahmimi/MineOps
-cd MineOps
-```
+## Quick Start
 
-## Configure Secrets
+1. Install Docker Desktop, `k3d`, `kubectl`, Terraform, Node.js 20+, and PowerShell.
+2. Create a `mineops.yaml` file and keep secrets in environment variables.
+3. Run `mineops validate`.
+4. Run `mineops init`.
+5. Inspect the result with `mineops status --all` and `mineops doctor --all`.
 
-Create `.env`:
-
-```powershell
-Copy-Item .env.example .env
-notepad .env
-```
-
-Required values:
-
-```text
-DISCORD_TOKEN=
-DISCORD_CLIENT_ID=
-DISCORD_GUILD_ID=
-PLAYIT_SECRET_KEY=
-```
-
-Optional values:
-
-```text
-DISCORD_ALERT_CHANNEL_ID=
-PLAYIT_JOIN_ADDRESS=
-MINEOPS_STORAGE_PATH=.local/k3d/storage
-MINEOPS_BACKUP_HOST_PATH=./backups
-MINEOPS_TIME_ZONE=
-IDLE_SHUTDOWN_ENABLED=true
-IDLE_SHUTDOWN_MINUTES=30
-```
-
-If `MINEOPS_TIME_ZONE` is empty, `mineops init` derives the host timezone and injects it into MineOps runtime containers so logs, events, alerts, and backup names use host-local time.
-
-## Configure Minecraft
-
-Edit:
-
-```text
-config/minecraft.yaml
-```
-
-Example:
-
-```yaml
-minecraft:
-  type: PAPER
-  version: LATEST
-
-world:
-  seed: "5063885805507972583"
-  difficulty: normal
-  mode: survival
-
-server:
-  memory: 4G
-  onlineMode: true
-  maxPlayers: 20
-
-operators:
-  - YourMinecraftUsername
-
-backup:
-  enabled: true
-  interval: "*/30 * * * *"
-  mode: append_with_limit
-  limit: 5
-```
-
-Validate:
-
-```powershell
-mineops validate
-mineops config show
-```
-
-## Configure Discord Admins
-
-Only MineOps admins can run `/stop_server` and `/restart_server`.
-
-```powershell
-Copy-Item mineops-admins.json.example mineops-admins.json
-notepad mineops-admins.json
-```
-
-Example:
-
-```json
-{
-  "admins": [
-    {
-      "username": "Mahmimi",
-      "discordUserId": "12345"
-    }
-  ]
-}
-```
-
-`mineops-admins.json` is ignored by Git.
-
-## Initialize MineOps
-
-```powershell
-mineops init
-```
-
-`mineops init` is idempotent. It validates requirements, creates or reuses the k3d cluster, prepares host folders, builds and loads the Discord bot image only when needed, reconciles Terraform and Kubernetes resources, injects runtime config, waits for workloads, and prints a deployment summary.
-
-## Validate
-
-```powershell
-mineops status
-mineops playit
-mineops health
-mineops doctor
-mineops metrics
-terraform -chdir=infra/terraform plan
-```
-
-Terraform should report:
-
-```text
-No changes.
-```
-
-## First Backup
-
-```powershell
-mineops backup
-mineops backups
-```
-
-Backups are stored under:
-
-```text
-./backups
-```
-
-## First Restore
-
-Restore is an administrative CLI operation.
-
-```powershell
-mineops restore latest
-```
-
-## Import Existing World
-
-Stop Minecraft first:
-
-```powershell
-mineops stop minecraft
-mineops import world "D:\minecraft-server\data"
-mineops start minecraft
-```
-
-MineOps refuses import while Minecraft or backup operations are active.
-
-When importing from a server data root, MineOps copies the nested `world` folder only and shows import phase/progress output while the transfer runs.
-
-Imported world metadata is authoritative. MineOps warns about drift but does not overwrite migrated world metadata automatically.
-
-## Update Minecraft
-
-```powershell
-mineops update minecraft LATEST
-mineops update minecraft 1.21.1
-```
-
-The workflow validates the version, creates a backup, updates `config/minecraft.yaml`, patches the live Minecraft Deployment, waits for rollout when Minecraft is running, and emits an event.
-
-## Discord Commands
-
-Visibility:
-
-- `/status`
-- `/server`
-- `/playit`
-- `/players`
-- `/dashboard`
-- `/backups`
-- `/events`
-- `/alerts`
-- `/help`
-
-Lifecycle:
-
-- `/start_server`
-- `/stop_server`
-- `/restart_server`
-
-`/start_server` is open to everyone.
-
-`/stop_server` and `/restart_server` require `mineops-admins.json`.
-
-## Security Model
-
-- Secrets stay in `.env` and Kubernetes Secrets.
-- Admin IDs stay in ignored `mineops-admins.json`.
-- Discord lifecycle RBAC is namespace-scoped.
-- Discord can only operate the Minecraft Deployment lifecycle.
-- Discord cannot run Terraform.
-- Discord cannot run arbitrary kubectl.
-- Discord cannot run arbitrary Minecraft commands.
-- RCON is disabled.
+Detailed setup is in [installation](docs/getting-started/installation.md) and [quick start](docs/getting-started/quick-start.md).
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [CLI](docs/cli.md)
-- [Configuration](docs/configuration.md)
-- [Minecraft Upgrades](docs/minecraft-upgrades.md)
-- [Server Lifecycle](docs/server-lifecycle.md)
-- [World Migration](docs/world-migration.md)
-- [Backups](docs/backup.md)
-- [Restore](docs/restore.md)
-- [Discord UX](docs/discord-ux.md)
-- [Monitoring and Alerting](docs/monitoring-alerting.md)
-- [Secrets](docs/secret-management.md)
-- [Changelog](CHANGELOG.md)
+- Getting started
+  - [Installation](docs/getting-started/installation.md)
+  - [Quick Start](docs/getting-started/quick-start.md)
+  - [First Server](docs/getting-started/first-server.md)
+- User guide
+  - [mineops.yaml](docs/user-guide/mineops-yaml.md)
+  - [Multi-instance](docs/user-guide/multi-instance.md)
+  - [Commands](docs/user-guide/commands.md)
+- Operator guide
+  - [Day-2 Operations](docs/operator-guide/day-2-operations.md)
+  - [Backup And Restore](docs/operator-guide/backup-and-restore.md)
+  - [Troubleshooting](docs/operator-guide/troubleshooting.md)
+- Architecture
+  - [Overview](docs/architecture/overview.md)
+  - [Deployment Pipeline](docs/architecture/deployment-pipeline.md)
+  - [Configuration System](docs/architecture/configuration-system.md)
+  - [Infrastructure](docs/architecture/infrastructure.md)
+  - [Runtime](docs/architecture/runtime.md)
+  - [Storage](docs/architecture/storage.md)
+  - [Networking](docs/architecture/networking.md)
+  - [Service Descriptors](docs/architecture/service-descriptors.md)
+- Developer guide
+  - [Project Structure](docs/developer-guide/project-structure.md)
+  - [Configuration Adapters](docs/developer-guide/configuration-adapters.md)
+  - [Deployment Planner](docs/developer-guide/deployment-planner.md)
+  - [Adding A Service](docs/developer-guide/adding-a-service.md)
+  - [Testing](docs/developer-guide/testing.md)
+- Migration
+  - [Legacy To mineops.yaml](docs/migration/legacy-to-mineops-yaml.md)
+  - [Upgrading](docs/migration/upgrading.md)
+- ADRs
+  - [ADR Index](docs/adr/README.md)
+
+## Repository Layout
+
+```text
+apps/
+  discord-bot/       Discord ChatOps service
+  mineops-cli/       Operator CLI, config model, generators, orchestration
+  utils/             Shared utilities
+docs/                User, operator, architecture, developer, and migration docs
+infra/
+  k3d/               Local cluster definition
+  terraform/         Terraform for Minecraft, Playit, backup, and namespace resources
+platform/
+  kubernetes/        Static platform manifests and reference resources
+scripts/             Runtime bootstrap, restore, and validation scripts
+mineops.yaml         External platform SSOT
+```
+
+## Design Principles
+
+- MineOps is a platform, not a script.
+- `MineOpsConfig` is the internal domain model.
+- `mineops.yaml` is the external SSOT.
+- Only adapters read configuration files.
+- Infrastructure consumes generated artifacts.
+- Validation fails fast before infrastructure mutation.
+- Configuration is immutable after model construction.
+- Deployment is deterministic and idempotent.
+- Multi-instance and namespace isolation come first.
+
+## Development Workflow
+
+Use the CLI as the normal integration surface:
+
+```powershell
+mineops validate
+mineops init
+mineops status --all
+mineops doctor --all
+```
+
+Validation and syntax checks:
+
+```powershell
+node apps/mineops-cli/src/index.js help
+npm --prefix apps/mineops-cli run check
+npm --prefix apps/discord-bot run check
+terraform -chdir=infra/terraform validate
+```
+
+## Contributing
+
+Contributions should preserve the SSOT-to-artifact architecture. New behavior should extend adapters, domain config, generators, services, or runtime executors rather than reintroducing direct file reads inside infrastructure code.
+
+Read [project structure](docs/developer-guide/project-structure.md), [configuration adapters](docs/developer-guide/configuration-adapters.md), and [adding a service](docs/developer-guide/adding-a-service.md) before changing platform internals.
