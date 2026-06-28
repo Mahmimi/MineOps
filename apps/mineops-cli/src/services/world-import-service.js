@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { PlatformError, UserInputError } from '../domain/errors.js';
+import { resourceNamesFor } from '../domain/resource-names.js';
 
 function directoryStats(directory) {
   const stats = { files: 0, bytes: 0 };
@@ -33,20 +34,19 @@ function formatBytes(bytes) {
 }
 
 export class WorldImportService {
-  constructor({ runner, kubernetes, dataService, namespace }) {
+  constructor({ runner, kubernetes, dataService, operations }) {
     this.runner = runner;
     this.kubernetes = kubernetes;
     this.dataService = dataService;
-    this.namespace = namespace;
-    this.podName = 'mineops-world-import';
+    this.operations = operations;
   }
 
   detectSource(sourcePath) {
     const resolved = path.resolve(sourcePath);
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
       throw new UserInputError('World import source must be an existing directory', {
-        usage: 'mineops import world <path>',
-        examples: ['mineops import world "D:\\minecraft-server\\data"'],
+        usage: 'mineops import --instance <name> --source <path>',
+        examples: ['mineops import --instance survival --source migrate/mineops-minecraft-data-old'],
       });
     }
 
@@ -61,7 +61,7 @@ export class WorldImportService {
     if (!directWorld && !nestedWorld) {
       throw new UserInputError('Source does not look like Minecraft world data', {
         usage: 'Expected either <path>\\world\\level.dat or <path>\\level.dat with region folder.',
-        examples: ['mineops import world "D:\\minecraft-server\\data"'],
+        examples: ['mineops import --instance survival --source migrate/mineops-minecraft-data-old'],
       });
     }
 
@@ -78,55 +78,51 @@ export class WorldImportService {
     };
   }
 
-  ensureImportAllowed() {
-    const state = this.kubernetes.deploymentState('minecraft');
-    if (state.state !== 'SCALED TO 0') {
-      throw new UserInputError('Minecraft must be stopped before importing world data', {
-        usage: 'mineops stop minecraft\nmineops import world <path>',
-        examples: ['mineops stop minecraft', 'mineops import world "D:\\minecraft-server\\data"'],
-      });
-    }
-    const runningBackup = this.kubernetes.backupJobs().some((job) => (job.status?.active ?? 0) > 0);
+  ensureImportAllowed(instance) {
+    const runningBackup = this.kubernetes.backupJobs(instance).some((job) => (job.status?.active ?? 0) > 0);
     if (runningBackup) {
       throw new UserInputError('A backup is currently running. Try again later.', {
-        usage: 'mineops import world <path>',
+        usage: 'mineops import --instance <name> --source <path>',
       });
     }
   }
 
-  createMigrationPod() {
+  createMigrationPod(instance) {
+    const names = resourceNamesFor(instance);
     const overrides = JSON.stringify({
       spec: {
         containers: [{
-          name: this.podName,
+          name: names.worldImportPod,
           image: 'busybox:1.36',
           command: ['sh', '-c', 'sleep 3600'],
-          volumeMounts: [{ name: 'minecraft-data', mountPath: '/minecraft-data' }],
+          volumeMounts: [{ name: names.minecraftPvc, mountPath: '/minecraft-data' }],
         }],
         volumes: [{
-          name: 'minecraft-data',
-          persistentVolumeClaim: { claimName: 'minecraft-data' },
+          name: names.minecraftPvc,
+          persistentVolumeClaim: { claimName: names.minecraftPvc },
         }],
         restartPolicy: 'Never',
       },
     });
 
-    this.runner.run('kubectl', ['delete', 'pod', this.podName, '-n', this.namespace, '--ignore-not-found=true'], { allowFailure: true });
-    this.runner.run('kubectl', ['run', this.podName, '-n', this.namespace, '--image=busybox:1.36', '--restart=Never', `--overrides=${overrides}`, '--command', '--', 'sh', '-c', 'sleep 3600']);
-    this.runner.run('kubectl', ['wait', '--for=condition=Ready', `pod/${this.podName}`, '-n', this.namespace, '--timeout=120s']);
+    this.runner.run('kubectl', ['delete', 'pod', names.worldImportPod, '-n', instance.namespace, '--ignore-not-found=true'], { allowFailure: true });
+    this.runner.run('kubectl', ['run', names.worldImportPod, '-n', instance.namespace, '--image=busybox:1.36', '--restart=Never', `--overrides=${overrides}`, '--command', '--', 'sh', '-c', 'sleep 3600']);
+    this.runner.run('kubectl', ['wait', '--for=condition=Ready', `pod/${names.worldImportPod}`, '-n', instance.namespace, '--timeout=120s']);
   }
 
-  cleanupMigrationPod() {
-    this.runner.run('kubectl', ['delete', 'pod', this.podName, '-n', this.namespace, '--ignore-not-found=true'], { allowFailure: true });
+  cleanupMigrationPod(instance) {
+    const names = resourceNamesFor(instance);
+    this.runner.run('kubectl', ['delete', 'pod', names.worldImportPod, '-n', instance.namespace, '--ignore-not-found=true'], { allowFailure: true });
   }
 
-  copyWorldWithProgress({ source, destination, totalBytes, onStep }) {
+  copyWorldWithProgress(instance, { source, destination, totalBytes, onStep }) {
+    const names = resourceNamesFor(instance);
     return new Promise((resolve, reject) => {
       const tar = spawn('tar', ['-cf', '-', '.'], {
         cwd: source,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      const kubectl = spawn('kubectl', ['exec', '-i', '-n', this.namespace, this.podName, '--', 'tar', '-xf', '-', '-C', destination], {
+      const kubectl = spawn('kubectl', ['exec', '-i', '-n', instance.namespace, names.worldImportPod, '--', 'tar', '-xf', '-', '-C', destination], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -190,10 +186,7 @@ export class WorldImportService {
       kubectl.stdin.on('drain', () => {
         tar.stdout.resume();
       });
-      kubectl.stdin.on('error', () => {
-        // The validation step catches incomplete imports. Stdin can close first
-        // when kubectl exits after the remote tar has finished extracting.
-      });
+      kubectl.stdin.on('error', () => {});
       tar.stdout.on('end', () => {
         transferStreamComplete = true;
         if (!kubectl.stdin.destroyed) kubectl.stdin.end();
@@ -245,23 +238,28 @@ export class WorldImportService {
     });
   }
 
-  async importWorld(sourcePath, { onStep = () => {} } = {}) {
+  async importWorld(instance, sourcePath, { onStep = () => {} } = {}) {
+    const names = resourceNamesFor(instance);
     onStep('Inspecting source directory...');
     const detected = this.detectSource(sourcePath);
     onStep(`Source detected: ${detected.mode === 'data-root' ? 'server data root' : 'world folder'}`);
     onStep(`World payload: ${detected.files} files, ${formatBytes(detected.bytes)}`);
 
-    onStep('Checking Minecraft is stopped and backups are idle...');
-    this.ensureImportAllowed();
+    onStep('Checking backup activity...');
+    this.ensureImportAllowed(instance);
+
+    let minecraftRestarted = false;
+    onStep('Stopping Minecraft...');
+    this.operations.scale(instance, names.minecraftDeployment, 0);
 
     onStep('Creating temporary import pod...');
-    this.createMigrationPod();
+    this.createMigrationPod(instance);
 
     try {
-      onStep('Preparing target world directory in minecraft-data PVC...');
-      this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'sh', '-c', 'rm -rf /minecraft-data/world && mkdir -p /minecraft-data/world']);
+      onStep('Preparing target world directory in PVC...');
+      this.runner.run('kubectl', ['exec', '-n', instance.namespace, names.worldImportPod, '--', 'sh', '-c', 'rm -rf /minecraft-data/world && mkdir -p /minecraft-data/world']);
 
-      await this.copyWorldWithProgress({
+      await this.copyWorldWithProgress(instance, {
         source: detected.copySource,
         destination: '/minecraft-data/world',
         totalBytes: detected.bytes,
@@ -269,16 +267,32 @@ export class WorldImportService {
       });
 
       onStep('Verifying imported world metadata...');
-      this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'test', '-f', '/minecraft-data/world/level.dat']);
+      this.runner.run('kubectl', ['exec', '-n', instance.namespace, names.worldImportPod, '--', 'test', '-f', '/minecraft-data/world/level.dat']);
 
       onStep('Repairing world file ownership and permissions...');
-      this.runner.run('kubectl', ['exec', '-n', this.namespace, this.podName, '--', 'sh', '-c', 'chown -R 1000:1000 /minecraft-data/world && chmod -R u+rwX,g+rwX /minecraft-data/world']);
+      this.runner.run('kubectl', ['exec', '-n', instance.namespace, names.worldImportPod, '--', 'sh', '-c', 'chown -R 1000:1000 /minecraft-data/world && chmod -R u+rwX,g+rwX /minecraft-data/world']);
 
-      this.dataService.appendEvent({ type: 'minecraft', severity: 'INFO', message: 'World Imported' });
+      onStep('Starting Minecraft...');
+      this.operations.scale(instance, names.minecraftDeployment, 1);
+      minecraftRestarted = true;
+
+      onStep('Verifying running world...');
+      const pod = this.kubernetes.podFor(names.minecraftSelector, instance);
+      if (pod?.metadata?.name) {
+        this.runner.run('kubectl', ['exec', '-n', instance.namespace, pod.metadata.name, '--', 'sh', '-lc', 'test -d /data/world && test -f /data/world/level.dat']);
+      }
+
+      this.dataService.appendEvent(instance, { type: 'minecraft', severity: 'INFO', message: 'World Imported' });
       return detected;
+    } catch (error) {
+      if (!minecraftRestarted) {
+        onStep('Import failed before restart; attempting safe recovery...');
+        this.operations.scale(instance, names.minecraftDeployment, 1);
+      }
+      throw error;
     } finally {
       onStep('Cleaning up temporary import pod...');
-      this.cleanupMigrationPod();
+      this.cleanupMigrationPod(instance);
     }
   }
 }

@@ -16,6 +16,7 @@ import { metricsCommand } from './metrics.js';
 import { playitCommand } from './playit.js';
 import { restartCommand } from './restart.js';
 import { restoreCommand } from './restore.js';
+import { shellCommand } from './shell.js';
 import { startCommand } from './start-stop.js';
 import { statusCommand } from './status.js';
 import { stopCommand } from './start-stop.js';
@@ -46,6 +47,7 @@ export function createRegistry() {
     playitCommand,
     restartCommand,
     restoreCommand,
+    shellCommand,
     startCommand,
     statusCommand,
     stopCommand,

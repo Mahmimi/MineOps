@@ -1,4 +1,4 @@
-﻿import { Client, Events, GatewayIntentBits, REST, Routes } from 'discord.js';
+import { Client, Events, GatewayIntentBits, REST, Routes } from 'discord.js';
 import { commandDefinitions, createCommandHandlers } from './commands.js';
 import { startAlertingService } from '../platform/alerting-service.js';
 import { AlertHistoryStore } from '../platform/alert-history-store.js';
@@ -25,6 +25,12 @@ async function registerCommands({ config, logger }) {
   logger.info('discord slash commands registered', { commandCount: commandDefinitions.length, scope: config.discord.guildId ? 'guild' : 'global' });
 }
 
+function interactionAllowedInChannel(interaction, config) {
+  const commandChannelId = config.discord.commandChannelId?.trim?.() ?? '';
+  if (!commandChannelId) return true;
+  return interaction.channelId === commandChannelId;
+}
+
 export async function startDiscordBot({ config, logger, runtimeState, platformService, stateStore }) {
   if (!config.discord.enabled) {
     logger.warn('discord gateway disabled because DISCORD_TOKEN is empty or placeholder');
@@ -37,7 +43,11 @@ export async function startDiscordBot({ config, logger, runtimeState, platformSe
 
   client.once(Events.ClientReady, async (readyClient) => {
     runtimeState.discordConnected = true;
-    logger.info('discord client ready', { userTag: readyClient.user.tag, userId: readyClient.user.id });
+    logger.info('discord client ready', {
+      userTag: readyClient.user.tag,
+      userId: readyClient.user.id,
+      commandChannelId: config.discord.commandChannelId || null,
+    });
 
     try {
       await registerCommands({ config, logger });
@@ -62,6 +72,15 @@ export async function startDiscordBot({ config, logger, runtimeState, platformSe
 
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
+
+    if (!interactionAllowedInChannel(interaction, config)) {
+      logger.info('discord command ignored for unmatched channel', {
+        command: interaction.commandName,
+        channelId: interaction.channelId,
+        commandChannelId: config.discord.commandChannelId || null,
+      });
+      return;
+    }
 
     const handler = handlers[interaction.commandName];
     if (!handler) return;

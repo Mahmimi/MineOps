@@ -79,3 +79,6 @@ coverage/
 
 # serena
 .serena/
+
+# production files
+production/

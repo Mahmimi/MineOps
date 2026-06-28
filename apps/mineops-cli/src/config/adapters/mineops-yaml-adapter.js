@@ -4,6 +4,27 @@ import { parse } from 'yaml';
 import { ConfigAdapter } from './config-adapter.js';
 import { withLegacyEnvDefaults } from '../resolution/legacy-env.js';
 
+function parseDotEnv(raw) {
+  const values = {};
+
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const index = trimmed.indexOf('=');
+    if (index < 1) continue;
+
+    const key = trimmed.slice(0, index).trim();
+    let value = trimmed.slice(index + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    values[key] = value;
+  }
+
+  return values;
+}
+
 function resolveEnvRefs(value, env = process.env) {
   if (typeof value === 'string') {
     return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, name) => env[name] ?? '');
@@ -42,10 +63,11 @@ function minecraftConfig(service = {}) {
 }
 
 export class MineOpsYamlAdapter extends ConfigAdapter {
-  constructor({ root, configPath = path.join(root, 'mineops.yaml') }) {
+  constructor({ root, configPath = path.join(root, 'mineops.yaml'), envPath = path.join(root, '.env') }) {
     super({ source: 'mineops.yaml' });
     this.root = root;
     this.configPath = configPath;
+    this.envPath = envPath;
   }
 
   detect() {
@@ -54,7 +76,8 @@ export class MineOpsYamlAdapter extends ConfigAdapter {
 
   loadRaw() {
     const rawYaml = fs.readFileSync(this.configPath, 'utf8');
-    const doc = resolveEnvRefs(parse(rawYaml) ?? {});
+    const fileEnv = fs.existsSync(this.envPath) ? parseDotEnv(fs.readFileSync(this.envPath, 'utf8')) : {};
+    const doc = resolveEnvRefs(parse(rawYaml) ?? {}, { ...fileEnv, ...process.env });
     const globalEnv = withLegacyEnvDefaults({
       MINEOPS_TIME_ZONE: doc.globals?.timezone,
       MINEOPS_BACKUP_HOST_PATH: doc.globals?.backupHostPath,
@@ -101,13 +124,13 @@ export class MineOpsYamlAdapter extends ConfigAdapter {
     return {
       source: this.source,
       files: {
-        env: { path: this.configPath, exists: true },
+        env: { path: this.envPath, exists: fs.existsSync(this.envPath) },
         minecraft: { path: this.configPath, exists: true },
         admins: { path: this.configPath, exists: true },
       },
       cluster: { name: doc.cluster?.name ?? 'mineops-local' },
       env,
-      raw: { env: rawYaml, minecraft: rawYaml, admins: rawYaml },
+      raw: { env: fs.existsSync(this.envPath) ? fs.readFileSync(this.envPath, 'utf8') : null, minecraft: rawYaml, admins: rawYaml },
       instances,
     };
   }

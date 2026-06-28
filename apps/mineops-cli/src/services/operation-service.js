@@ -1,69 +1,79 @@
 import { UserInputError } from '../domain/errors.js';
+import { resourceNamesFor } from '../domain/resource-names.js';
 
 export class OperationService {
-  constructor({ runner, namespace, dataService }) {
+  constructor({ runner, dataService }) {
     this.runner = runner;
-    this.namespace = namespace;
     this.dataService = dataService;
-    this.backupCronJobName = 'minecraft-backup';
   }
 
-  setBackupCronJobSuspended(suspend) {
+  setBackupCronJobSuspended(instance, suspend) {
+    const names = resourceNamesFor(instance);
     this.runner.run('kubectl', [
       'patch',
       'cronjob',
-      this.backupCronJobName,
+      names.backupCronJob,
       '-n',
-      this.namespace,
+      instance.namespace,
       '--type=merge',
       `-p={"spec":{"suspend":${suspend ? 'true' : 'false'}}}`,
     ]);
   }
 
-  setMinecraftVersion(version) {
-    this.runner.run('kubectl', ['set', 'env', 'deployment/minecraft', '-n', this.namespace, `VERSION=${version}`]);
-    const state = this.runner.run('kubectl', ['get', 'deployment/minecraft', '-n', this.namespace, '-o', 'jsonpath={.spec.replicas}'], {
+  setMinecraftVersion(instance, version) {
+    const names = resourceNamesFor(instance);
+    this.runner.run('kubectl', ['set', 'env', `deployment/${names.minecraftDeployment}`, '-n', instance.namespace, `VERSION=${version}`]);
+    const state = this.runner.run('kubectl', ['get', `deployment/${names.minecraftDeployment}`, '-n', instance.namespace, '-o', 'jsonpath={.spec.replicas}'], {
       capture: true,
       allowFailure: true,
     });
     if (state.status === 0 && Number.parseInt(state.stdout, 10) > 0) {
-      this.runner.run('kubectl', ['rollout', 'status', 'deployment/minecraft', '-n', this.namespace, '--timeout=300s']);
+      this.runner.run('kubectl', ['rollout', 'status', `deployment/${names.minecraftDeployment}`, '-n', instance.namespace, '--timeout=300s']);
     }
   }
 
-  scale(name, replicas) {
-    if (name === 'minecraft' && replicas === 0) {
-      this.setBackupCronJobSuspended(true);
+  scale(instance, name, replicas) {
+    const names = resourceNamesFor(instance);
+    if (name !== names.minecraftDeployment) {
+      throw new UserInputError('Unsupported scale target', {
+        usage: 'mineops start minecraft --instance <name>\nmineops stop minecraft --instance <name>',
+        examples: ['mineops start minecraft --instance survival', 'mineops stop minecraft --instance survival'],
+      });
     }
 
-    this.runner.run('kubectl', ['scale', `deployment/${name}`, '-n', this.namespace, `--replicas=${replicas}`]);
+    if (replicas === 0) {
+      this.setBackupCronJobSuspended(instance, true);
+    }
+
+    this.runner.run('kubectl', ['scale', `deployment/${name}`, '-n', instance.namespace, `--replicas=${replicas}`]);
     if (replicas > 0) {
-      this.runner.run('kubectl', ['rollout', 'status', `deployment/${name}`, '-n', this.namespace, '--timeout=300s']);
-      if (name === 'minecraft') this.setBackupCronJobSuspended(false);
+      this.runner.run('kubectl', ['rollout', 'status', `deployment/${name}`, '-n', instance.namespace, '--timeout=300s']);
+      this.setBackupCronJobSuspended(instance, false);
     } else {
       this.runner.run('kubectl', [
         'wait',
         '--for=delete',
         'pod',
         '-l',
-        'app.kubernetes.io/name=minecraft',
+        names.minecraftSelector,
         '-n',
-        this.namespace,
+        instance.namespace,
         '--timeout=300s',
       ]);
     }
-    this.dataService.appendEvent({ type: 'minecraft', severity: 'INFO', message: `${name} scaled to ${replicas}` });
+    this.dataService.appendEvent(instance, { type: 'minecraft', severity: 'INFO', message: `${name} scaled to ${replicas}` });
   }
 
-  restart(target) {
-    if (target !== 'minecraft') {
+  restart(instance, target) {
+    const names = resourceNamesFor(instance);
+    if (target !== names.minecraftDeployment) {
       throw new UserInputError('Unsupported restart target', {
-        usage: 'mineops restart minecraft',
-        examples: ['mineops restart minecraft'],
+        usage: 'mineops restart minecraft --instance <name>',
+        examples: ['mineops restart minecraft --instance survival'],
       });
     }
-    this.runner.run('kubectl', ['rollout', 'restart', `deployment/${target}`, '-n', this.namespace]);
-    this.runner.run('kubectl', ['rollout', 'status', `deployment/${target}`, '-n', this.namespace, '--timeout=300s']);
-    this.dataService.appendEvent({ type: 'minecraft', severity: 'INFO', message: `${target} restarted` });
+    this.runner.run('kubectl', ['rollout', 'restart', `deployment/${target}`, '-n', instance.namespace]);
+    this.runner.run('kubectl', ['rollout', 'status', `deployment/${target}`, '-n', instance.namespace, '--timeout=300s']);
+    this.dataService.appendEvent(instance, { type: 'minecraft', severity: 'INFO', message: `${target} restarted` });
   }
 }

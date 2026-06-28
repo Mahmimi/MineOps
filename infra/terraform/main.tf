@@ -19,6 +19,10 @@ locals {
     "app.kubernetes.io/name"      = "playit"
     "app.kubernetes.io/component" = "tunnel"
   })
+
+  playit_secret_labels = merge(local.playit_labels, {
+    "app.kubernetes.io/managed-by" = "runtime-artifact"
+  })
 }
 
 resource "kubernetes_namespace_v1" "mineops" {
@@ -339,7 +343,7 @@ resource "kubernetes_secret_v1" "playit" {
     name      = var.playit_secret_name
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
 
-    labels = local.playit_labels
+    labels = local.playit_secret_labels
   }
 
   type = "Opaque"
@@ -425,15 +429,7 @@ resource "kubernetes_deployment_v1" "playit" {
           image_pull_policy = "IfNotPresent"
 
           command = ["/bin/sh", "-c"]
-          args = [<<-EOT
-            cat > /tmp/minecraft-forward <<'EOF'
-            #!/bin/sh
-            exec nc minecraft 25565
-            EOF
-            chmod +x /tmp/minecraft-forward
-            exec nc -lk -p 25565 -e /tmp/minecraft-forward
-          EOT
-          ]
+          args = ["printf '#!/bin/sh\\nexec nc minecraft 25565\\n' > /tmp/minecraft-forward && chmod +x /tmp/minecraft-forward && exec nc -lk -p 25565 -e /tmp/minecraft-forward"]
 
           port {
             name           = "minecraft"
@@ -462,3 +458,6 @@ resource "kubernetes_deployment_v1" "playit" {
     }
   }
 }
+
+
+

@@ -10,14 +10,17 @@ function state(value) {
 export const dashboardCommand = {
   name: 'dashboard',
   description: 'Show a terminal dashboard.',
-  usage: 'mineops dashboard [--once]',
-  examples: ['mineops dashboard', 'mineops dashboard --once'],
+  usage: 'mineops dashboard [--once] [--instance <name>]',
+  examples: ['mineops dashboard', 'mineops dashboard --once', 'mineops dashboard --instance survival'],
   async execute({ args, services }) {
     const once = args.includes('--once');
+    const filteredArgs = args.filter((arg) => arg !== '--once');
+    const resolved = services.resolveTargets(filteredArgs, { usage: this.usage, examples: this.examples });
+    const binding = resolved.bindings[0];
     do {
-      const s = services.platform.snapshot();
+      const s = binding.platform.snapshot();
       if (!once) console.clear();
-      card('Minecraft', [
+      card(`Minecraft (${binding.instance.name})`, [
         ['Status', state(s.minecraft.state)],
         ['Players', s.players?.available ? `${s.players.onlineCount} / ${s.players.maxPlayers}` : 'unknown'],
         ['Uptime', services.time.durationSince(s.pod?.status?.startTime)],
@@ -30,7 +33,7 @@ export const dashboardCommand = {
       ]);
       card('Operations', [
         ['Maintenance', s.maintenance.enabled ? yellow('ON') : green('OFF')],
-        ['Alerts', `${services.data.alerts().filter((alert) => !alert.resolved).length} active`],
+        ['Alerts', `${binding.data.alerts().filter((alert) => !alert.resolved).length} active`],
       ]);
       print('Press Ctrl+C to exit. Refresh: 10s');
       if (once) break;

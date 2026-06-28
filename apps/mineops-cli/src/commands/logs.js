@@ -1,32 +1,33 @@
 import { print } from '../ui/printer.js';
 import { UserInputError } from '../domain/errors.js';
 
+function parseTarget(args) {
+  const first = args[0];
+  if (!first || first.startsWith('--')) return { target: 'minecraft', args };
+  return { target: first, args: args.slice(1) };
+}
+
 export const logsCommand = {
   name: 'logs',
   description: 'Show logs for a MineOps component.',
-  usage: 'mineops logs <minecraft|discord|playit|backup>',
-  examples: ['mineops logs minecraft', 'mineops logs discord', 'mineops logs playit', 'mineops logs backup'],
-  execute({ args, services, constants }) {
-    const target = args[0];
-    if (!target) {
-      print('Available log targets:');
-      print('');
-      print('1. minecraft');
-      print('2. discord');
-      print('3. playit');
-      print('4. backup');
-      print('');
-      print('Usage:');
-      print('mineops logs minecraft');
-      return;
-    }
+  usage: 'mineops logs [minecraft|discord|playit|backup] [--instance <name>|--all]',
+  examples: ['mineops logs --instance survival', 'mineops logs minecraft --instance survival', 'mineops logs backup --all'],
+  execute({ args, services }) {
+    const parsed = parseTarget(args);
+    const resolved = services.resolveTargets(parsed.args, { usage: this.usage, examples: this.examples, allowAll: true });
     const map = {
-      minecraft: ['logs', '-n', constants.namespace, 'deployment/minecraft', '--tail=120'],
-      discord: ['logs', '-n', constants.namespace, 'deployment/discord-bot', '--tail=120'],
-      playit: ['logs', '-n', constants.namespace, 'deployment/playit', '--tail=120'],
-      backup: ['logs', '-n', constants.namespace, '-l', 'app.kubernetes.io/name=minecraft-backup', '--all-containers=true', '--tail=120'],
+      minecraft: (binding) => ['logs', '-n', binding.instance.namespace, `deployment/${binding.names.minecraftDeployment}`, '--tail=120'],
+      discord: (binding) => ['logs', '-n', binding.instance.namespace, `deployment/${binding.names.discordDeployment}`, '--tail=120'],
+      playit: (binding) => ['logs', '-n', binding.instance.namespace, `deployment/${binding.names.playitDeployment}`, '--tail=120'],
+      backup: (binding) => ['logs', '-n', binding.instance.namespace, '-l', binding.names.backupSelector, '--all-containers=true', '--tail=120'],
     };
-    if (!map[target]) throw new UserInputError('Invalid log target', { usage: this.usage, examples: this.examples });
-    services.runner.run('kubectl', map[target], { allowFailure: target === 'backup' });
+    if (!map[parsed.target]) throw new UserInputError('Invalid log target', { usage: this.usage, examples: this.examples });
+
+    for (const binding of resolved.bindings) {
+      if (resolved.bindings.length > 1) {
+        print(`=== ${binding.instance.name} (${parsed.target}) ===`);
+      }
+      services.runner.run('kubectl', map[parsed.target](binding), { allowFailure: parsed.target === 'backup' });
+    }
   },
 };

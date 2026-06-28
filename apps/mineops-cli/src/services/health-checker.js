@@ -1,15 +1,17 @@
+import { resourceNamesFor } from '../domain/resource-names.js';
+
 export class HealthChecker {
   constructor({ kubernetes }) {
     this.kubernetes = kubernetes;
   }
 
-  check(mineopsConfig = null) {
-    const instances = mineopsConfig?.instances ?? [{ name: 'default', namespace: this.kubernetes.namespace }];
-    const instanceHealth = instances.map((instance) => {
-      const minecraft = this.kubernetes.deploymentState('minecraft', instance.namespace);
-      const playit = this.kubernetes.playitState(instance.namespace);
-      const discord = this.kubernetes.deploymentState('discord-bot', instance.namespace);
-      const backup = this.kubernetes.cronJob('minecraft-backup', instance.namespace);
+  check(mineopsConfig) {
+    const instanceHealth = (mineopsConfig?.instances ?? []).map((instance) => {
+      const names = resourceNamesFor(instance);
+      const minecraft = this.kubernetes.deploymentState(names.minecraftDeployment, instance);
+      const playit = this.kubernetes.playitState(instance);
+      const discord = this.kubernetes.deploymentState(names.discordDeployment, instance);
+      const backup = this.kubernetes.cronJob(names.backupCronJob, instance);
       return {
         name: instance.name,
         namespace: instance.namespace,

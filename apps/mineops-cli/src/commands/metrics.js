@@ -4,12 +4,14 @@ import { icons, line } from '../ui/theme.js';
 export const metricsCommand = {
   name: 'metrics',
   description: 'Show lightweight platform metrics.',
-  usage: 'mineops metrics',
-  examples: ['mineops metrics'],
-  execute({ services }) {
-    const s = services.platform.snapshot();
-    const latest = services.backups.listBackups()[0];
-    header(`${icons.spark} MineOps Metrics`);
+  usage: 'mineops metrics [--instance <name>]',
+  examples: ['mineops metrics', 'mineops metrics --instance survival'],
+  execute({ args, services }) {
+    const resolved = services.resolveTargets(args, { usage: this.usage, examples: this.examples });
+    const binding = resolved.bindings[0];
+    const s = binding.platform.snapshot();
+    const latest = binding.backups.listBackups()[0];
+    header(`${icons.spark} MineOps Metrics (${binding.instance.name})`);
     print(`${icons.players} Players`);
     print(s.players?.available ? `${s.players.onlineCount} / ${s.players.maxPlayers}` : 'not available');
     print('');

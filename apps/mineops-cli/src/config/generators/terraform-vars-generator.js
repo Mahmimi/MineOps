@@ -6,12 +6,25 @@ function instanceSuffix(instance) {
   return instance.name === 'default' ? '' : `-${instance.name}`;
 }
 
+function kubernetesNameSuffix(instance) {
+  if (instance.name === 'default') return '';
+
+  const normalized = instance.name
+    .toLowerCase()
+    .replace(/[^a-z0-9.-]+/g, '-')
+    .replace(/^[^a-z0-9]+/, '')
+    .replace(/[^a-z0-9]+$/, '');
+
+  return normalized ? `-${normalized}` : '';
+}
+
 export function generateTerraformVars(mineopsConfig, instance = mineopsConfig.defaultInstance()) {
   const minecraft = serviceConfig(instance, 'minecraft');
   const playit = serviceConfig(instance, 'playit');
   const backup = serviceConfig(instance, 'backup');
   const env = mineopsConfig.globals.env;
   const suffix = instanceSuffix(instance);
+  const kubernetesSuffix = kubernetesNameSuffix(instance);
 
   const operators = minecraft.operators ?? [];
   const storage = minecraft.storage ?? {};
@@ -25,7 +38,7 @@ export function generateTerraformVars(mineopsConfig, instance = mineopsConfig.de
     namespace: instance.namespace,
     mineops_time_zone: env.MINEOPS_TIME_ZONE,
     mineops_time_offset_seconds: Number.parseInt(env.MINEOPS_TIME_OFFSET_SECONDS, 10),
-    minecraft_pv_name: `mineops-minecraft-data${suffix}`,
+    minecraft_pv_name: `mineops-minecraft-data${kubernetesSuffix}`,
     minecraft_storage_size: storage.size,
     minecraft_host_path: storage.hostPath ?? `/var/lib/rancher/k3s/storage/mineops-minecraft-data${suffix}`,
     minecraft_type: minecraft.minecraft.type,

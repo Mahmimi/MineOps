@@ -61,7 +61,7 @@ instances:
 
         # Optional but recommended. Minecraft operator usernames.
         operators:
-          - ${MINEOPS_OPERATOR_USERNAME}
+          - ${MINECRAFT_OPERATOR_USERNAME}
 
         backup:
           # Required. Creates the CronJob when true; suspends it when false.
@@ -96,10 +96,10 @@ instances:
 
       discord:
         # Required. Discord bot token for the survival instance.
-        token: ${DISCORD_TOKEN_MAHMIMI}
+        token: ${DISCORD_TOKEN}
 
         # Required. Discord application client ID for the survival bot.
-        clientId: ${DISCORD_CLIENT_ID_MAHMIMI}
+        clientId: ${DISCORD_CLIENT_ID}
 
         # Required. Discord guild/server ID for survival commands.
         guildId: ${DISCORD_GUILD_ID_MAHMIMI}
@@ -118,7 +118,7 @@ instances:
         secretKey: ${PLAYIT_SECRET_MAHMIMI}
 
         # Optional. Human-readable public join address once known.
-        joinAddress: ${PLAYIT_JOIN_MAHMIMI}
+        joinAddress: ${PLAYIT_JOIN_ADDRESS_MAHMIMI}
 
       backup:
         # Required. Backup service settings for this instance.
@@ -139,7 +139,7 @@ instances:
 
         # Required. Set this to the exact Minecraft version used by the Aternos export if known.
         # LATEST is convenient but may upgrade the world on first boot.
-        version: LATEST
+        version: 26.2
 
         world:
           # Required for new worlds. Existing migrated Aternos world data keeps its own seed.
@@ -163,7 +163,7 @@ instances:
 
         # Optional but recommended. Minecraft operator usernames.
         operators:
-          - ${MINEOPS_OPERATOR_USERNAME}
+          - ${MINECRAFT_OPERATOR_USERNAME}
 
         backup:
           # Required. Creates the CronJob when true; suspends it when false.
@@ -198,10 +198,10 @@ instances:
 
       discord:
         # Required. Discord bot token for the gameguys instance.
-        token: ${DISCORD_TOKEN_GAMEGUYS}
+        token: ${DISCORD_TOKEN}
 
         # Required. Discord application client ID for the gameguys bot.
-        clientId: ${DISCORD_CLIENT_ID_GAMEGUYS}
+        clientId: ${DISCORD_CLIENT_ID}
 
         # Required. Discord guild/server ID for gameguys commands.
         guildId: ${DISCORD_GUILD_ID_GAMEGUYS}
@@ -220,7 +220,7 @@ instances:
         secretKey: ${PLAYIT_SECRET_GAMEGUYS}
 
         # Optional. Human-readable public join address once known.
-        joinAddress: ${PLAYIT_JOIN_GAMEGUYS}
+        joinAddress: ${PLAYIT_JOIN_ADDRESS_GAMEGUYS}
 
       backup:
         # Required. Backup service settings for this instance.

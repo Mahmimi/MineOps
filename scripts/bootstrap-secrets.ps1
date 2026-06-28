@@ -39,6 +39,30 @@ function Get-LiteralArgs {
   return $literalArgs
 }
 
+function New-TempConfigMapFiles {
+  param([object]$Data)
+
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("mineops-configmap-" + [System.Guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $tempDir | Out-Null
+
+  foreach ($property in $Data.PSObject.Properties) {
+    $filePath = Join-Path $tempDir $property.Name
+    [System.IO.File]::WriteAllText($filePath, [string]$property.Value, [System.Text.UTF8Encoding]::new($false))
+  }
+
+  return $tempDir
+}
+
+function Get-ConfigMapFileArgs {
+  param([string]$TempDir)
+
+  $fileArgs = @()
+  foreach ($file in Get-ChildItem -LiteralPath $TempDir -File) {
+    $fileArgs += "--from-file=$($file.Name)=$($file.FullName)"
+  }
+  return $fileArgs
+}
+
 function Apply-Labels {
   param(
     [string]$ResourceKind,
@@ -92,16 +116,22 @@ foreach ($configMap in @($artifact.configMaps)) {
     throw "Runtime ConfigMap artifact is missing a name."
   }
 
-  $renderArgs = @("create", "configmap", $configMap.name, "-n", $targetNamespace) + (Get-LiteralArgs -Data $configMap.data) + @("--dry-run=client", "-o", "yaml")
+  $tempDir = New-TempConfigMapFiles -Data $configMap.data
+  try {
+    $renderArgs = @("create", "configmap", $configMap.name, "-n", $targetNamespace) + (Get-ConfigMapFileArgs -TempDir $tempDir) + @("--dry-run=client", "-o", "yaml")
 
-  $manifest = kubectl @renderArgs
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to render ConfigMap artifact: $($configMap.name)"
+    $manifest = kubectl @renderArgs
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to render ConfigMap artifact: $($configMap.name)"
+    }
+    $manifest | kubectl apply -f - | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to apply ConfigMap artifact: $($configMap.name)"
+    }
+  } finally {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
   }
-  $manifest | kubectl apply -f - | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw "Failed to apply ConfigMap artifact: $($configMap.name)"
-  }
+
   Apply-Labels -ResourceKind "configmap" -ResourceName $configMap.name -Labels $configMap.labels
 
   if ($configMap.name -eq "mineops-admins") {
