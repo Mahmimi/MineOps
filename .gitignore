@@ -29,12 +29,15 @@
 # Local MineOps state
 .local/
 .mineops/
+migrate/
 
 # Terraform
 **/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
+*.tfvars
+*.tfvars.json
 crash.log
 crash.*.log
 override.tf
@@ -76,3 +79,6 @@ coverage/
 
 # serena
 .serena/
+
+# production files
+production/

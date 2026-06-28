@@ -9,6 +9,23 @@ variable "namespace" {
   type        = string
   default     = "mineops"
 }
+variable "instance_name" {
+  description = "MineOps instance name used for labels and generated unique resource names."
+  type        = string
+  default     = "default"
+}
+
+variable "minecraft_pv_name" {
+  description = "Cluster-scoped PersistentVolume name for Minecraft data."
+  type        = string
+  default     = "mineops-minecraft-data"
+}
+
+variable "backup_node_path" {
+  description = "Path inside the Kubernetes node where backups are stored. When empty, MineOps derives it from backup_host_path for backward compatibility."
+  type        = string
+  default     = ""
+}
 
 variable "mineops_time_zone" {
   description = "IANA time zone used by MineOps runtime containers for human-facing logs, events, and backup names."
@@ -74,6 +91,29 @@ variable "minecraft_seed" {
   description = "Minecraft world seed used for new worlds. Existing migrated worlds keep their own data."
   type        = string
   default     = "5063885805507972583"
+}
+variable "minecraft_online_mode" {
+  description = "Whether Minecraft online mode is enabled."
+  type        = bool
+  default     = true
+}
+
+variable "minecraft_max_players" {
+  description = "Maximum number of Minecraft players."
+  type        = number
+  default     = 20
+}
+
+variable "minecraft_difficulty" {
+  description = "Minecraft world difficulty."
+  type        = string
+  default     = "normal"
+}
+
+variable "minecraft_mode" {
+  description = "Minecraft game mode."
+  type        = string
+  default     = "survival"
 }
 
 variable "minecraft_service_type" {

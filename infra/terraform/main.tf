@@ -2,6 +2,7 @@ locals {
   common_labels = {
     "app.kubernetes.io/part-of"    = "mineops"
     "app.kubernetes.io/managed-by" = "terraform"
+    "app.kubernetes.io/instance"   = var.instance_name
   }
 
   minecraft_labels = merge(local.common_labels, {
@@ -17,6 +18,10 @@ locals {
   playit_labels = merge(local.common_labels, {
     "app.kubernetes.io/name"      = "playit"
     "app.kubernetes.io/component" = "tunnel"
+  })
+
+  playit_secret_labels = merge(local.playit_labels, {
+    "app.kubernetes.io/managed-by" = "runtime-artifact"
   })
 }
 
@@ -37,7 +42,7 @@ resource "kubernetes_persistent_volume_v1" "minecraft_data" {
   }
 
   metadata {
-    name = "mineops-minecraft-data"
+    name = var.minecraft_pv_name
 
     labels = local.minecraft_labels
   }
@@ -99,7 +104,6 @@ resource "kubernetes_deployment_v1" "minecraft" {
   lifecycle {
     ignore_changes = [
       spec[0].replicas,
-      spec[0].template,
     ]
   }
 
@@ -119,7 +123,8 @@ resource "kubernetes_deployment_v1" "minecraft" {
 
     selector {
       match_labels = {
-        "app.kubernetes.io/name" = "minecraft"
+        "app.kubernetes.io/name"     = "minecraft"
+        "app.kubernetes.io/instance" = var.instance_name
       }
     }
 
@@ -280,6 +285,8 @@ resource "kubernetes_deployment_v1" "minecraft" {
 }
 
 resource "kubernetes_service_v1" "minecraft" {
+  wait_for_load_balancer = false
+
   metadata {
     name      = "minecraft"
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
@@ -291,7 +298,8 @@ resource "kubernetes_service_v1" "minecraft" {
     type = var.minecraft_service_type
 
     selector = {
-      "app.kubernetes.io/name" = "minecraft"
+      "app.kubernetes.io/name"     = "minecraft"
+      "app.kubernetes.io/instance" = var.instance_name
     }
 
     port {
@@ -304,6 +312,8 @@ resource "kubernetes_service_v1" "minecraft" {
 }
 
 resource "kubernetes_service_v1" "minecraft_query" {
+  wait_for_load_balancer = false
+
   metadata {
     name      = "minecraft-query"
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
@@ -315,7 +325,8 @@ resource "kubernetes_service_v1" "minecraft_query" {
     type = "ClusterIP"
 
     selector = {
-      "app.kubernetes.io/name" = "minecraft"
+      "app.kubernetes.io/name"     = "minecraft"
+      "app.kubernetes.io/instance" = var.instance_name
     }
 
     port {
@@ -332,7 +343,7 @@ resource "kubernetes_secret_v1" "playit" {
     name      = var.playit_secret_name
     namespace = kubernetes_namespace_v1.mineops.metadata[0].name
 
-    labels = local.playit_labels
+    labels = local.playit_secret_labels
   }
 
   type = "Opaque"
@@ -367,7 +378,8 @@ resource "kubernetes_deployment_v1" "playit" {
 
     selector {
       match_labels = {
-        "app.kubernetes.io/name" = "playit"
+        "app.kubernetes.io/name"     = "playit"
+        "app.kubernetes.io/instance" = var.instance_name
       }
     }
 
@@ -417,15 +429,7 @@ resource "kubernetes_deployment_v1" "playit" {
           image_pull_policy = "IfNotPresent"
 
           command = ["/bin/sh", "-c"]
-          args = [<<-EOT
-            cat > /tmp/minecraft-forward <<'EOF'
-            #!/bin/sh
-            exec nc minecraft 25565
-            EOF
-            chmod +x /tmp/minecraft-forward
-            exec nc -lk -p 25565 -e /tmp/minecraft-forward
-          EOT
-          ]
+          args    = ["printf '#!/bin/sh\\nexec nc minecraft 25565\\n' > /tmp/minecraft-forward && chmod +x /tmp/minecraft-forward && exec nc -lk -p 25565 -e /tmp/minecraft-forward"]
 
           port {
             name           = "minecraft"
@@ -454,3 +458,6 @@ resource "kubernetes_deployment_v1" "playit" {
     }
   }
 }
+
+
+

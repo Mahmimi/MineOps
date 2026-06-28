@@ -1,4 +1,4 @@
-﻿const PLACEHOLDER_TOKEN = 'replace-with-discord-bot-token';
+const PLACEHOLDER_TOKEN = 'replace-with-discord-bot-token';
 
 function boolFromEnv(value, defaultValue) {
   if (value === undefined || value === '') return defaultValue;
@@ -17,6 +17,7 @@ function pathFromEnv(value, defaultValue) {
 
 export function loadConfig(env = process.env) {
   const discordToken = env.DISCORD_TOKEN ?? '';
+  const alertChannelId = env.DISCORD_ALERT_CHANNEL_ID ?? '';
 
   return {
     serviceName: env.SERVICE_NAME ?? 'mineops-discord-bot',
@@ -27,7 +28,8 @@ export function loadConfig(env = process.env) {
       tokenPlaceholder: PLACEHOLDER_TOKEN,
       clientId: env.DISCORD_CLIENT_ID ?? '',
       guildId: env.DISCORD_GUILD_ID ?? '',
-      alertChannelId: env.DISCORD_ALERT_CHANNEL_ID ?? '',
+      alertChannelId,
+      commandChannelId: env.DISCORD_COMMAND_CHANNEL_ID ?? alertChannelId,
       registerCommands: boolFromEnv(env.DISCORD_REGISTER_COMMANDS, true),
       required: boolFromEnv(env.DISCORD_REQUIRED, false),
       enabled: discordToken !== '' && discordToken !== PLACEHOLDER_TOKEN,
@@ -64,4 +66,3 @@ export function loadConfig(env = process.env) {
     },
   };
 }
-

@@ -4,7 +4,7 @@ locals {
     "app.kubernetes.io/component" = "backup"
   })
 
-  backup_node_path = can(regex("^[A-Za-z]:", var.backup_host_path)) || can(regex("^\\.", var.backup_host_path)) ? "/backups" : var.backup_host_path
+  backup_node_path = var.backup_node_path != "" ? var.backup_node_path : (can(regex("^[A-Za-z]:", var.backup_host_path)) || can(regex("^\\.", var.backup_host_path)) ? "/backups" : var.backup_host_path)
 }
 
 resource "kubernetes_service_account_v1" "minecraft_backup" {
@@ -67,7 +67,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
   }
 
   data = {
-    "backup.sh" = <<-SCRIPT
+    "backup.sh" = replace(<<-SCRIPT
       #!/bin/sh
       set -eu
 
@@ -249,6 +249,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       broadcast_result="success"
       log "backup completed with mode=$BACKUP_MODE"
     SCRIPT
+    , "\r\n", "\n")
   }
 }
 
@@ -331,7 +332,7 @@ resource "kubernetes_cron_job_v1" "minecraft_backup" {
 
               env {
                 name  = "MINECRAFT_LABEL_SELECTOR"
-                value = "app.kubernetes.io/name=minecraft"
+                value = "app.kubernetes.io/name=minecraft,app.kubernetes.io/instance=${var.instance_name}"
               }
 
               env {

@@ -1,10 +1,8 @@
 import { ValidationError } from '../domain/errors.js';
 
 export class RequirementValidator {
-  constructor({ runner, envProvider, configService }) {
+  constructor({ runner }) {
     this.runner = runner;
-    this.envProvider = envProvider;
-    this.configService = configService;
   }
 
   checkOs() {
@@ -29,26 +27,10 @@ export class RequirementValidator {
     return true;
   }
 
-  checkEnvironment() {
-    const env = this.envProvider.load();
-    const required = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID', 'DISCORD_GUILD_ID', 'PLAYIT_SECRET_KEY'];
-    const missing = required.filter((key) => !env[key]);
-    if (missing.length > 0) {
-      throw new ValidationError(`Missing required .env values: ${missing.join(', ')}`);
-    }
-    return env;
-  }
-
-  checkConfiguration() {
-    return this.configService.validate();
-  }
-
-  validate() {
+  validate(mineopsConfig) {
     const os = this.checkOs();
     const commands = this.checkCommands();
     this.checkDocker();
-    const env = this.checkEnvironment();
-    this.checkConfiguration();
-    return { os, commands, env };
+    return { os, commands, env: mineopsConfig.globals.env };
   }
 }

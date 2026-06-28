@@ -1,0 +1,230 @@
+# MineOps production configuration.
+# This file is the production single source of truth. Keep secrets in environment variables,
+# not in this file. MineOps resolves ${NAME} before validation and deployment.
+apiVersion: mineops/v1
+
+cluster:
+  # Required. Permanent k3d cluster name for production.
+  # The old production cluster name was mineops-local; new production deployments use mineops.
+  name: mineops
+
+globals:
+  # Required. IANA timezone used by Minecraft, Playit, Discord bot, logs, and backup timestamps.
+  timezone: Asia/Bangkok
+
+  # Required. Host directory mounted into the k3d nodes for Minecraft PersistentVolumes.
+  # MineOps will create per-instance node paths under this mount, for example:
+  # D:/MineOps/production/storage/mineops-minecraft-data-survival
+  # D:/MineOps/production/storage/mineops-minecraft-data-gameguys
+  storagePath: D:/MineOps/production/storage
+
+  # Required. Host directory mounted into the k3d nodes for backups.
+  # MineOps stores backups per instance under this directory:
+  # D:/MineOps/production/backups/survival
+  # D:/MineOps/production/backups/gameguys
+  backupHostPath: D:/MineOps/production/backups
+
+instances:
+  Mahmimi_server:
+    # Required. Isolated Kubernetes namespace for the legacy MineOps server.
+    # Migration source: migrate/mineops-minecraft-data-old
+    namespace: mineops-mahmimi
+
+    services:
+      minecraft:
+        # Required. Server implementation for itzg/minecraft-server.
+        type: PAPER
+
+        # Required. Preserve the current legacy setting unless you intentionally upgrade.
+        # Avoid downgrading after first production boot.
+        version: 26.2
+
+        world:
+          # Required for new worlds. Existing migrated data keeps its existing level data.
+          seed: "5063885805507972583"
+
+          # Required. Allowed values: peaceful, easy, normal, hard.
+          difficulty: normal
+
+          # Required. Allowed values: survival, creative, adventure, spectator.
+          mode: survival
+
+        server:
+          # Required. JVM memory passed to the Minecraft container.
+          memory: 4G
+
+          # Required. Keep true for online-mode authentication.
+          onlineMode: true
+
+          # Required. Maximum player count.
+          maxPlayers: 20
+
+        # Optional but recommended. Minecraft operator usernames.
+        operators:
+          - ${MINECRAFT_OPERATOR_USERNAME}
+
+        backup:
+          # Required. Creates the CronJob when true; suspends it when false.
+          enabled: true
+
+          # Required. Five-field cron expression for automatic backups.
+          interval: "*/30 * * * *"
+
+          # Required. Allowed values: replace, append, append_with_limit.
+          mode: append
+
+          # Required when mode is append_with_limit; harmless for append.
+          limit: 5
+
+        storage:
+          # Required. PVC request size. Changing this later is intentionally ignored for safety.
+          size: 20Gi
+
+        resources:
+          requests:
+            # Required. Kubernetes CPU request for the Minecraft pod.
+            cpu: 1000m
+
+            # Required. Kubernetes memory request for the Minecraft pod.
+            memory: 5Gi
+          limits:
+            # Required. Kubernetes CPU limit for the Minecraft pod.
+            cpu: 3000m
+
+            # Required. Kubernetes memory limit for the Minecraft pod.
+            memory: 6Gi
+
+      discord:
+        # Required. Discord bot token for the survival instance.
+        token: ${DISCORD_TOKEN}
+
+        # Required. Discord application client ID for the survival bot.
+        clientId: ${DISCORD_CLIENT_ID}
+
+        # Required. Discord guild/server ID for survival commands.
+        guildId: ${DISCORD_GUILD_ID_MAHMIMI}
+
+        # Optional. Discord channel ID for survival alerts; leave empty if not used.
+        alertChannelId: ${DISCORD_ALERT_CHANNEL_ID_MAHMIMI}
+
+        # Optional. Discord users allowed to run admin-only MineOps commands.
+        admins:
+          admins:
+            - username: ${DISCORD_ADMIN_USERNAME}
+              discordUserId: ${DISCORD_ADMIN_USER_ID}
+
+      playit:
+        # Required. Playit secret key dedicated to the survival instance.
+        secretKey: ${PLAYIT_SECRET_MAHMIMI}
+
+        # Optional. Human-readable public join address once known.
+        joinAddress: ${PLAYIT_JOIN_ADDRESS_MAHMIMI}
+
+      backup:
+        # Required. Backup service settings for this instance.
+        enabled: true
+        interval: "*/30 * * * *"
+        mode: append
+        limit: 5
+
+  GameGuys_server:
+    # Required. Isolated Kubernetes namespace for the friend's Aternos world.
+    # Migration source: migrate/gameguys-server
+    namespace: mineops-gameguys
+
+    services:
+      minecraft:
+        # Required. Server implementation for itzg/minecraft-server.
+        type: PAPER
+
+        # Required. Set this to the exact Minecraft version used by the Aternos export if known.
+        # LATEST is convenient but may upgrade the world on first boot.
+        version: 26.2
+
+        world:
+          # Required for new worlds. Existing migrated Aternos world data keeps its own seed.
+          seed: ""
+
+          # Required. Allowed values: peaceful, easy, normal, hard.
+          difficulty: normal
+
+          # Required. Allowed values: survival, creative, adventure, spectator.
+          mode: survival
+
+        server:
+          # Required. JVM memory passed to the Minecraft container.
+          memory: 4G
+
+          # Required. Keep true for online-mode authentication.
+          onlineMode: true
+
+          # Required. Maximum player count.
+          maxPlayers: 20
+
+        # Optional but recommended. Minecraft operator usernames.
+        operators:
+          - ${MINECRAFT_OPERATOR_USERNAME}
+
+        backup:
+          # Required. Creates the CronJob when true; suspends it when false.
+          enabled: true
+
+          # Required. Five-field cron expression for automatic backups.
+          interval: "*/30 * * * *"
+
+          # Required. Allowed values: replace, append, append_with_limit.
+          mode: append
+
+          # Required when mode is append_with_limit; harmless for append.
+          limit: 5
+
+        storage:
+          # Required. PVC request size. Changing this later is intentionally ignored for safety.
+          size: 20Gi
+
+        resources:
+          requests:
+            # Required. Kubernetes CPU request for the Minecraft pod.
+            cpu: 1000m
+
+            # Required. Kubernetes memory request for the Minecraft pod.
+            memory: 5Gi
+          limits:
+            # Required. Kubernetes CPU limit for the Minecraft pod.
+            cpu: 3000m
+
+            # Required. Kubernetes memory limit for the Minecraft pod.
+            memory: 6Gi
+
+      discord:
+        # Required. Discord bot token for the gameguys instance.
+        token: ${DISCORD_TOKEN}
+
+        # Required. Discord application client ID for the gameguys bot.
+        clientId: ${DISCORD_CLIENT_ID}
+
+        # Required. Discord guild/server ID for gameguys commands.
+        guildId: ${DISCORD_GUILD_ID_GAMEGUYS}
+
+        # Optional. Discord channel ID for gameguys alerts; leave empty if not used.
+        alertChannelId: ${DISCORD_ALERT_CHANNEL_ID_GAMEGUYS}
+
+        # Optional. Discord users allowed to run admin-only MineOps commands.
+        admins:
+          admins:
+            - username: ${DISCORD_ADMIN_USERNAME}
+              discordUserId: ${DISCORD_ADMIN_USER_ID}
+
+      playit:
+        # Required. Playit secret key dedicated to the gameguys instance.
+        secretKey: ${PLAYIT_SECRET_GAMEGUYS}
+
+        # Optional. Human-readable public join address once known.
+        joinAddress: ${PLAYIT_JOIN_ADDRESS_GAMEGUYS}
+
+      backup:
+        # Required. Backup service settings for this instance.
+        enabled: true
+        interval: "*/30 * * * *"
+        mode: append
+        limit: 5

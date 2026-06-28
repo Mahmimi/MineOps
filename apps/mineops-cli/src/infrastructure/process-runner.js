@@ -2,15 +2,23 @@ import { spawnSync } from 'node:child_process';
 import { PlatformError } from '../domain/errors.js';
 
 export class ProcessRunner {
-  constructor({ cwd, envProvider }) {
+  constructor({ cwd, baseEnv = {} }) {
     this.cwd = cwd;
-    this.envProvider = envProvider;
+    this.baseEnv = { ...baseEnv };
+  }
+
+  setBaseEnv(baseEnv) {
+    this.baseEnv = { ...baseEnv };
+  }
+
+  commandEnv(extraEnv = {}) {
+    return { ...process.env, ...this.baseEnv, ...extraEnv };
   }
 
   run(command, args = [], options = {}) {
     const result = spawnSync(command, args, {
       cwd: options.cwd ?? this.cwd,
-      env: { ...process.env, ...this.envProvider.load({ optional: true }), ...(options.env ?? {}) },
+      env: this.commandEnv(options.env ?? {}),
       encoding: 'utf8',
       shell: false,
       stdio: options.capture || options.quiet ? ['ignore', 'pipe', 'pipe'] : 'inherit',
