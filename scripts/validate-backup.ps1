@@ -65,12 +65,12 @@ function Test-Backup {
   $regionPath = Join-Path $worldPath "region"
   $dimensionRegionPath = Join-Path $worldPath "dimensions\minecraft\overworld\region"
   $playerStatePaths = @(
-    Join-Path $worldPath "playerdata",
-    Join-Path $worldPath "advancements",
-    Join-Path $worldPath "stats",
-    Join-Path $worldPath "players\data",
-    Join-Path $worldPath "players\advancements",
-    Join-Path $worldPath "players\stats"
+    (Join-Path $worldPath "playerdata"),
+    (Join-Path $worldPath "advancements"),
+    (Join-Path $worldPath "stats"),
+    (Join-Path $worldPath "players\data"),
+    (Join-Path $worldPath "players\advancements"),
+    (Join-Path $worldPath "players\stats")
   )
 
   $worldExists = Test-Path -LiteralPath $worldPath -PathType Container

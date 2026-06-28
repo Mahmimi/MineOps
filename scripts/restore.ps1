@@ -29,6 +29,27 @@ function Require-Command {
   }
 }
 
+function Invoke-Kubectl {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+  & kubectl @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "kubectl $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+  }
+}
+
+function Invoke-KubectlWithStdin {
+  param(
+    [string]$InputText,
+    [string[]]$Arguments
+  )
+
+  $InputText | & kubectl @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    throw "kubectl $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+  }
+}
+
 function Resolve-BackupName {
   param(
     [string]$Root,
@@ -74,6 +95,9 @@ function Wait-ForMinecraftPodsDeleted {
 
   for ($attempt = 1; $attempt -le 60; $attempt++) {
     $pods = kubectl get pods -n $Ns -l $Selector -o jsonpath="{.items[*].metadata.name}"
+    if ($LASTEXITCODE -ne 0) {
+      throw "kubectl get pods failed with exit code $LASTEXITCODE."
+    }
     if ([string]::IsNullOrWhiteSpace($pods)) {
       return
     }
@@ -132,7 +156,7 @@ spec:
 
   $path = Join-Path $env:TEMP "mineops-restore-helper.yaml"
   Set-Content -LiteralPath $path -Value $manifest -Encoding utf8
-  kubectl apply -f $path
+  Invoke-Kubectl apply -f $path
 }
 
 Require-Command -Name "kubectl"
@@ -149,6 +173,9 @@ Write-Host "Namespace: $Namespace"
 
 Write-Step "Verify Minecraft pod exists"
 $existingPod = kubectl get pods -n $Namespace -l $selector -o jsonpath="{.items[0].metadata.name}"
+if ($LASTEXITCODE -ne 0) {
+  throw "kubectl get pods failed with exit code $LASTEXITCODE."
+}
 if ([string]::IsNullOrWhiteSpace($existingPod)) {
   throw "Minecraft pod was not found."
 }
@@ -159,16 +186,16 @@ Write-Step "Validate requested backup"
 
 try {
   Write-Step "Scale Minecraft down"
-  kubectl scale deployment/$Deployment -n $Namespace --replicas=0
+  Invoke-Kubectl scale "deployment/$Deployment" -n $Namespace --replicas=0
 
   Write-Step "Wait for pod termination"
   Wait-ForMinecraftPodsDeleted -Ns $Namespace -Selector $selector
 
   Write-Step "Create restore helper pod"
-  kubectl delete pod mineops-restore-helper -n $Namespace --ignore-not-found=true | Out-Null
+  Invoke-Kubectl delete pod mineops-restore-helper -n $Namespace --ignore-not-found=true | Out-Null
   Apply-RestoreHelper -Ns $Namespace -ClaimName $PvcName -Image $HelperImage -NodeBackupPath $BackupNodePath
   $helperCreated = $true
-  kubectl wait -n $Namespace --for=condition=Ready pod/mineops-restore-helper --timeout=120s
+  Invoke-Kubectl wait -n $Namespace --for=condition=Ready pod/mineops-restore-helper --timeout=120s
 
   Write-Step "Restore world data"
   $restoreCommand = @"
@@ -185,6 +212,28 @@ for item in playerdata advancements stats players/data players/advancements play
     player_state_paths="`$player_state_paths `$item"
   fi
 done
+player_state_file_count() {
+  root="`$1"
+  count=0
+  for item in `$player_state_paths; do
+    if [ -e "`$root/world/`$item" ]; then
+      item_count="`$(find "`$root/world/`$item" -type f | wc -l | tr -d ' ')"
+      count=`$((count + item_count))
+    fi
+  done
+  printf '%s\n' "`$count"
+}
+player_state_checksums() {
+  root="`$1"
+  for item in `$player_state_paths; do
+    if [ -e "`$root/world/`$item" ]; then
+      find "`$root/world/`$item" -type f -exec sha256sum {} + |
+        sed "s#  `$root/world/#  #"
+    fi
+  done | sort
+}
+backup_player_state_count="`$(player_state_file_count "`$backup")"
+backup_player_state_checksums="`$(player_state_checksums "`$backup")"
 rm -rf "`$incoming"
 mkdir -p "`$incoming"
 tar -C "`$backup" -cf - . | tar -C "`$incoming" --no-same-owner -xf -
@@ -193,6 +242,10 @@ test -f "`$incoming/world/level.dat"
 for item in `$player_state_paths; do
   test -e "`$incoming/world/`$item"
 done
+incoming_player_state_count="`$(player_state_file_count "`$incoming")"
+test "`$incoming_player_state_count" -eq "`$backup_player_state_count"
+incoming_player_state_checksums="`$(player_state_checksums "`$incoming")"
+test "`$incoming_player_state_checksums" = "`$backup_player_state_checksums"
 for item in world world_nether world_the_end server.properties whitelist.json ops.json banned-ips.json banned-players.json usercache.json; do
   rm -rf "`$target/`$item"
 done
@@ -205,17 +258,36 @@ test -f "`$target/world/level.dat"
 for item in `$player_state_paths; do
   test -e "`$target/world/`$item"
 done
+target_player_state_count="`$(player_state_file_count "`$target")"
+test "`$target_player_state_count" -eq "`$backup_player_state_count"
+target_player_state_checksums="`$(player_state_checksums "`$target")"
+test "`$target_player_state_checksums" = "`$backup_player_state_checksums"
+echo "Restored player state files: `$target_player_state_count"
 "@
 
-  kubectl exec -n $Namespace mineops-restore-helper -- /bin/sh -lc $restoreCommand
+  Invoke-KubectlWithStdin -InputText $restoreCommand -Arguments @(
+    'exec',
+    '-i',
+    '-n', $Namespace,
+    'mineops-restore-helper',
+    '--',
+    '/bin/sh',
+    '-s'
+  )
 
   Write-Step "Start Minecraft"
-  kubectl scale deployment/$Deployment -n $Namespace --replicas=1
-  kubectl rollout status deployment/$Deployment -n $Namespace --timeout=300s
+  Invoke-Kubectl scale "deployment/$Deployment" -n $Namespace --replicas=1
+  Invoke-Kubectl rollout status "deployment/$Deployment" -n $Namespace --timeout=300s
 
   Write-Step "Verify restored world"
   $newPod = kubectl get pods -n $Namespace -l $selector -o jsonpath="{.items[0].metadata.name}"
-  kubectl exec -n $Namespace $newPod -- sh -lc "test -d /data/world && test -f /data/world/level.dat"
+  if ($LASTEXITCODE -ne 0) {
+    throw "kubectl get pods failed with exit code $LASTEXITCODE."
+  }
+  & kubectl exec -n $Namespace $newPod -- sh -lc "test -d /data/world && test -f /data/world/level.dat"
+  if ($LASTEXITCODE -ne 0) {
+    throw "kubectl exec restored-world verification failed with exit code $LASTEXITCODE."
+  }
 
   $finishedAt = Get-Date
   $duration = New-TimeSpan -Start $startedAt -End $finishedAt
