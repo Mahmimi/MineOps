@@ -1,5 +1,75 @@
 # Changelog
 
+## v1.2.0 - 2026-06-28
+
+Multi-MineOps Instances with SSOT YAML.
+
+### Added
+
+- Introduced `mineops.yaml` as the MineOps single source of truth (SSOT)
+- Added full multi-instance configuration support
+- Added instance-aware CLI execution model
+- Added `InstanceResolver` for:
+  - `--instance`
+  - `--all`
+  - default target resolution
+  - ambiguity detection
+  - explicit unsafe-operation targeting
+- Added `mineops shell <minecraft|discord|playit> --instance <name>`
+- Added instance-aware config inspection:
+  - `mineops config show --instance <name>`
+  - `mineops config graph`
+
+### Changed
+
+- Refactored the CLI from singleton-oriented execution to instance-first execution
+- Refactored service construction so operational services no longer bind to one namespace at startup
+- Updated core operational services to execute against `InstanceConfig`
+- Updated Terraform generation for multi-instance deployments
+- Updated runtime artifact generation for per-instance secrets and config
+- Updated Discord bot deployment/runtime wiring for per-instance command and alert behavior
+- Updated resource targeting to derive from config/domain naming rather than ad hoc namespace assumptions
+
+### CLI Improvements
+
+- `status`, `logs`, `backup`, `backups`, `doctor`, `health`, `playit`, `maintenance`, `alerts`, and `timeline` now support instance-aware targeting
+- Safe commands now support `--all` where appropriate
+- Ambiguous commands now fail fast instead of silently choosing one instance
+- Unsafe commands now require explicit target selection:
+  - `mineops import --instance <name> ...`
+  - `mineops restore --instance <name> ...`
+
+### Import and Operations
+
+- Reworked `mineops import` into an instance-aware workflow
+- Import flow now:
+  - validates the source
+  - detects world layout
+  - stops Minecraft
+  - waits for termination
+  - mounts the PVC
+  - copies world data
+  - preserves ownership/permissions
+  - verifies `level.dat`
+  - restarts Minecraft
+  - waits for readiness
+  - verifies runtime health
+
+### Fixed
+
+- Fixed `.env` resolution for `mineops.yaml` variable substitution
+- Fixed Terraform drift for runtime-managed Playit secret labels
+- Fixed Discord command channel isolation when shared bot credentials are used across instances
+- Fixed Discord admin allow-list runtime config handling
+- Fixed CLI backup path resolution for per-instance backup directories
+- Fixed Terraform formatting issues in `infra/terraform/main.tf`
+
+### Breaking Changes
+
+- Multi-instance environments now require explicit instance selection for unsafe commands
+- Commands that were previously singleton-defaulting may now fail with ambiguity until `--instance` or `--all` is provided
+- Operational usage is now centered on `mineops.yaml` SSOT rather than legacy singleton assumptions
+
 ## v1.1.0 - 2026-06-27
 
 World persistence and clean-room recovery hardening.
