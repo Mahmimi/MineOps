@@ -299,7 +299,7 @@ resource "kubernetes_service_v1" "minecraft" {
 
     selector = {
       "app.kubernetes.io/name"     = "minecraft"
-        "app.kubernetes.io/instance" = var.instance_name
+      "app.kubernetes.io/instance" = var.instance_name
     }
 
     port {
@@ -326,7 +326,7 @@ resource "kubernetes_service_v1" "minecraft_query" {
 
     selector = {
       "app.kubernetes.io/name"     = "minecraft"
-        "app.kubernetes.io/instance" = var.instance_name
+      "app.kubernetes.io/instance" = var.instance_name
     }
 
     port {
@@ -429,7 +429,7 @@ resource "kubernetes_deployment_v1" "playit" {
           image_pull_policy = "IfNotPresent"
 
           command = ["/bin/sh", "-c"]
-          args = ["printf '#!/bin/sh\\nexec nc minecraft 25565\\n' > /tmp/minecraft-forward && chmod +x /tmp/minecraft-forward && exec nc -lk -p 25565 -e /tmp/minecraft-forward"]
+          args    = ["printf '#!/bin/sh\\nexec nc minecraft 25565\\n' > /tmp/minecraft-forward && chmod +x /tmp/minecraft-forward && exec nc -lk -p 25565 -e /tmp/minecraft-forward"]
 
           port {
             name           = "minecraft"
