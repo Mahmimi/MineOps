@@ -134,6 +134,8 @@ backup:
 
 If `hostPath` is omitted, MineOps derives the per-instance backup directory from `globals.backupHostPath`.
 
+If `mode` is `append` and `limit` is set, MineOps retains only the newest `limit` backups. `append_with_limit` remains accepted for backward compatibility.
+
 ## Validation Rules
 
 Current validation includes:

@@ -168,6 +168,7 @@ function createServices() {
         config: () => backups.config(instance),
         listBackups: () => backups.listBackups(instance),
         backupRoot: () => backups.backupRoot(instance),
+        backupNodePath: () => backups.backupNodePath(instance),
       },
       config: {
         readRaw: () => config.readRaw(),

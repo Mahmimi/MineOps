@@ -6,6 +6,7 @@ param(
   [string]$Deployment = "minecraft",
   [string]$PvcName = "minecraft-data",
   [string]$BackupRoot = "",
+  [string]$BackupNodePath = "/backups",
   [string]$HelperImage = "bitnami/kubectl:latest"
 )
 
@@ -86,7 +87,8 @@ function Apply-RestoreHelper {
   param(
     [string]$Ns,
     [string]$ClaimName,
-    [string]$Image
+    [string]$Image,
+    [string]$NodeBackupPath
   )
 
   $manifest = @"
@@ -124,7 +126,7 @@ spec:
         claimName: $ClaimName
     - name: backups
       hostPath:
-        path: /backups
+        path: $NodeBackupPath
         type: Directory
 "@
 
@@ -164,7 +166,7 @@ try {
 
   Write-Step "Create restore helper pod"
   kubectl delete pod mineops-restore-helper -n $Namespace --ignore-not-found=true | Out-Null
-  Apply-RestoreHelper -Ns $Namespace -ClaimName $PvcName -Image $HelperImage
+  Apply-RestoreHelper -Ns $Namespace -ClaimName $PvcName -Image $HelperImage -NodeBackupPath $BackupNodePath
   $helperCreated = $true
   kubectl wait -n $Namespace --for=condition=Ready pod/mineops-restore-helper --timeout=120s
 
@@ -177,11 +179,20 @@ incoming="/minecraft-data/.restore-incoming"
 
 test -d "`$backup/world"
 test -f "`$backup/world/level.dat"
+player_state_paths=""
+for item in playerdata advancements stats players/data players/advancements players/stats; do
+  if [ -e "`$backup/world/`$item" ]; then
+    player_state_paths="`$player_state_paths `$item"
+  fi
+done
 rm -rf "`$incoming"
 mkdir -p "`$incoming"
 tar -C "`$backup" -cf - . | tar -C "`$incoming" --no-same-owner -xf -
 test -d "`$incoming/world"
 test -f "`$incoming/world/level.dat"
+for item in `$player_state_paths; do
+  test -e "`$incoming/world/`$item"
+done
 for item in world world_nether world_the_end server.properties whitelist.json ops.json banned-ips.json banned-players.json usercache.json; do
   rm -rf "`$target/`$item"
 done
@@ -191,6 +202,9 @@ done
 rm -rf "`$incoming"
 test -d "`$target/world"
 test -f "`$target/world/level.dat"
+for item in `$player_state_paths; do
+  test -e "`$target/world/`$item"
+done
 "@
 
   kubectl exec -n $Namespace mineops-restore-helper -- /bin/sh -lc $restoreCommand

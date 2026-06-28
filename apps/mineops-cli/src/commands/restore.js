@@ -49,6 +49,8 @@ export const restoreCommand = {
       binding.names.minecraftPvc,
       '-BackupRoot',
       binding.backups.backupRoot(),
+      '-BackupNodePath',
+      binding.backups.backupNodePath(),
     ]);
     binding.data.appendEvent({ type: 'minecraft', severity: 'INFO', message: `Restore completed from ${resolvedTarget}` });
     ok('Restore Complete');

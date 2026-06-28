@@ -243,7 +243,7 @@ variable "backup_mode" {
 }
 
 variable "backup_limit" {
-  description = "Maximum retained timestamped backups when backup_mode is append_with_limit."
+  description = "Maximum retained timestamped backups when backup_mode is append or append_with_limit and a positive limit is set."
   type        = number
   default     = 5
 

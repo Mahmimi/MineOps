@@ -9,6 +9,11 @@ export class BackupService {
     this.getMineOpsConfig = getMineOpsConfig;
   }
 
+
+  backupNodePath(instance) {
+    return instance.name === 'default' ? '/backups' : `/backups/${instance.name}`;
+  }
+
   backupRoot(instance) {
     const mineopsConfig = this.getMineOpsConfig();
     const backupConfig = instance.service('backup')?.config ?? {};

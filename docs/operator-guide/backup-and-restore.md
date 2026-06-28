@@ -40,8 +40,8 @@ mineops backups latest --instance survival
 ## Retention Modes
 
 - `replace`: one backup directory
-- `append`: timestamped backups, no deletion
-- `append_with_limit`: timestamped backups with retention limit
+- `append`: timestamped backups; if `limit` is set, MineOps keeps only the newest `limit` folders
+- `append_with_limit`: legacy alias for capped timestamped backups
 
 ## Backup Contents
 
@@ -56,6 +56,11 @@ MineOps backs up restore-oriented files:
 - `banned-ips.json`
 - `banned-players.json`
 - `usercache.json`
+
+Because the full `world` directory is copied, player state is included as part of the backup. That covers standard layouts such as:
+
+- `world/playerdata`, `world/advancements`, and `world/stats`
+- `world/players/data`, `world/players/advancements`, and `world/players/stats`
 
 It intentionally excludes runtime caches, logs, downloaded jars, and temporary files.
 
@@ -74,7 +79,7 @@ The CLI delegates to `scripts/restore.ps1`, which:
 2. scales Minecraft to zero
 3. waits for pod deletion
 4. creates a temporary restore helper pod
-5. replaces restore-oriented files in the PVC
+5. replaces restore-oriented files in the PVC, including player state stored under the world directory
 6. scales Minecraft back to one
 7. waits for rollout and verifies the restored world
 

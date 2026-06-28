@@ -64,13 +64,25 @@ function Test-Backup {
   $levelDat = Join-Path $worldPath "level.dat"
   $regionPath = Join-Path $worldPath "region"
   $dimensionRegionPath = Join-Path $worldPath "dimensions\minecraft\overworld\region"
-  $playerDataPath = Join-Path $worldPath "playerdata"
-  $playersPath = Join-Path $worldPath "players"
+  $playerStatePaths = @(
+    Join-Path $worldPath "playerdata",
+    Join-Path $worldPath "advancements",
+    Join-Path $worldPath "stats",
+    Join-Path $worldPath "players\data",
+    Join-Path $worldPath "players\advancements",
+    Join-Path $worldPath "players\stats"
+  )
 
   $worldExists = Test-Path -LiteralPath $worldPath -PathType Container
   $levelExists = Test-Path -LiteralPath $levelDat -PathType Leaf
   $regionExists = (Test-Path -LiteralPath $regionPath -PathType Container) -or (Test-Path -LiteralPath $dimensionRegionPath -PathType Container)
-  $playerStoreExists = (Test-Path -LiteralPath $playerDataPath -PathType Container) -or (Test-Path -LiteralPath $playersPath -PathType Container)
+  $playerStoreExists = $playerStatePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+  $playerStateFileCount = @(
+    $playerStoreExists | ForEach-Object {
+      (Get-ChildItem -LiteralPath $_ -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object).Count
+    }
+  ) | Measure-Object -Sum | Select-Object -ExpandProperty Sum
+  if ($null -eq $playerStateFileCount) { $playerStateFileCount = 0 }
 
   $size = 0L
   if ($worldExists) {
@@ -86,7 +98,8 @@ function Test-Backup {
     WorldSizeBytes = [long]$size
     LevelDatExists = $levelExists
     RegionExists = $regionExists
-    PlayerStoreExists = $playerStoreExists
+    PlayerStoreExists = ($playerStoreExists.Count -gt 0)
+    PlayerStateFiles = [int]$playerStateFileCount
     RequiredFilesPass = $worldExists -and $levelExists -and $regionExists
     IntegrityPass = $worldExists -and $levelExists -and $regionExists -and ($size -gt 0)
   }
@@ -116,6 +129,7 @@ Write-Host " - world/: $($result.WorldExists)"
 Write-Host " - level.dat: $($result.LevelDatExists)"
 Write-Host " - region/: $($result.RegionExists)"
 Write-Host " - playerdata/ or players/: $playerStoreStatus"
+Write-Host " - player state files: $($result.PlayerStateFiles)"
 Write-Host ""
 Write-Host "Integrity:"
 Write-Host $integrityStatus

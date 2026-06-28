@@ -88,7 +88,7 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
 
       backup_timestamp() {
         date_part="$(format_local_time '+%Y-%m-%d')"
-        hour="$(format_local_time '+%H' | sed 's/^0//')"
+        hour="$(format_local_time '+%H')"
         minute_second="$(format_local_time '+%M-%S')"
         printf 'backup_%s_%s-%s\n' "$date_part" "$hour" "$minute_second"
       }
@@ -175,16 +175,51 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
       }
 
       enforce_limit() {
+        list_backup_dirs() {
+          find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) -print
+        }
+
+        backup_sort_key() {
+          name="$(basename "$1")"
+          case "$name" in
+            backup_*)
+              stamp="$${name#backup_}"
+              ;;
+            *)
+              stamp="$name"
+              ;;
+          esac
+          date_part="$${stamp%%_*}"
+          time_part="$${stamp#*_}"
+          hour="$${time_part%%-*}"
+          rest="$${time_part#*-}"
+          printf '%s_%02d-%s\n' "$date_part" "$hour" "$rest"
+        }
+
+        count_backups() {
+          list_backup_dirs | wc -l | tr -d ' '
+        }
+
+        oldest_backup_dir() {
+          list_backup_dirs |
+            while IFS= read -r dir; do
+              [ -n "$dir" ] || continue
+              printf '%s\t%s\n' "$(backup_sort_key "$dir")" "$dir"
+            done |
+            sort |
+            sed -n '1s/^[^\t]*\t//p'
+        }
+
         limit="$1"
-        count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | wc -l | tr -d ' ')"
+        count="$(count_backups)"
         while [ "$count" -gt "$limit" ]; do
-          oldest="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | sed -n '1p')"
+          oldest="$(oldest_backup_dir)"
           if [ -z "$oldest" ]; then
             break
           fi
           log "removing old backup: $oldest"
           rm -rf "$oldest"
-          count="$(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d \( -name 'backup_20??-??-??_*-??-??' -o -name '20??-??-??_??-??-??' \) | sort | wc -l | tr -d ' ')"
+          count="$(count_backups)"
         done
       }
 
@@ -236,13 +271,18 @@ resource "kubernetes_config_map_v1" "minecraft_backup" {
           rm -rf "$temp_target"
           copy_world_data "$MINECRAFT_DATA_PATH" "$temp_target"
           mv "$temp_target" "$BACKUP_ROOT/$timestamp"
+          if [ "$${BACKUP_LIMIT:-0}" -ge 1 ] 2>/dev/null; then
+            enforce_limit "$BACKUP_LIMIT"
+          fi
           ;;
         append_with_limit)
           temp_target="$BACKUP_ROOT/.$timestamp.tmp"
           rm -rf "$temp_target"
           copy_world_data "$MINECRAFT_DATA_PATH" "$temp_target"
           mv "$temp_target" "$BACKUP_ROOT/$timestamp"
-          enforce_limit "$BACKUP_LIMIT"
+          if [ "$${BACKUP_LIMIT:-0}" -ge 1 ] 2>/dev/null; then
+            enforce_limit "$BACKUP_LIMIT"
+          fi
           ;;
       esac
 
