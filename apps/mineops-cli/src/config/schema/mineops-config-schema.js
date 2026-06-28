@@ -38,6 +38,7 @@ const minecraftYamlSchema = z.strictObject({
     memory: z.string().refine(isValidMemoryQuantity, { error: 'must be a valid memory string' }),
     onlineMode: z.boolean(),
     maxPlayers: z.number().int().positive(),
+    spawnProtection: z.number().int().min(0),
   }),
   operators: z.array(z.union([z.string(), z.number()])).optional(),
   backup: z.strictObject({

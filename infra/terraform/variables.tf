@@ -104,6 +104,12 @@ variable "minecraft_max_players" {
   default     = 20
 }
 
+variable "minecraft_spawn_protection" {
+  description = "Spawn protection radius in blocks. Set to 0 to disable vanilla spawn protection."
+  type        = number
+  default     = 16
+}
+
 variable "minecraft_difficulty" {
   description = "Minecraft world difficulty."
   type        = string

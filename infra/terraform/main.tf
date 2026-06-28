@@ -252,6 +252,11 @@ resource "kubernetes_deployment_v1" "minecraft" {
           }
 
           env {
+            name  = "SPAWN_PROTECTION"
+            value = tostring(local.cfg_minecraft_spawn_protection)
+          }
+
+          env {
             name  = "SEED"
             value = tostring(local.cfg_minecraft_seed)
           }

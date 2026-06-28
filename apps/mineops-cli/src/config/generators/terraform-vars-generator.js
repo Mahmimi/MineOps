@@ -46,6 +46,7 @@ export function generateTerraformVars(mineopsConfig, instance = mineopsConfig.de
     minecraft_memory: minecraft.server.memory,
     minecraft_online_mode: minecraft.server.onlineMode,
     minecraft_max_players: minecraft.server.maxPlayers,
+    minecraft_spawn_protection: minecraft.server.spawnProtection ?? 16,
     minecraft_difficulty: minecraft.world.difficulty,
     minecraft_mode: minecraft.world.mode,
     minecraft_ops: operators.length > 0 ? operators.join(',') : 'Jiranuwat',

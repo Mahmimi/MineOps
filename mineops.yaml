@@ -59,6 +59,9 @@ instances:
           # Required. Maximum player count.
           maxPlayers: 20
 
+          # disable spawn protection to allow players to build at spawn
+          spawnProtection: 0
+
         # Optional but recommended. Minecraft operator usernames.
         operators:
           - ${MINECRAFT_OPERATOR_USERNAME}
@@ -160,6 +163,9 @@ instances:
 
           # Required. Maximum player count.
           maxPlayers: 20
+
+          # disable spawn protection to allow players to build at spawn
+          spawnProtection: 0
 
         # Optional but recommended. Minecraft operator usernames.
         operators:

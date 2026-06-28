@@ -11,6 +11,7 @@ server:
   memory: 4G
   onlineMode: true
   maxPlayers: 20
+  spawnProtection: 0
 
 operators:
   - Jiranuwat

@@ -51,6 +51,7 @@ function minecraftConfig(service = {}) {
       memory: service.server?.memory ?? service.memory ?? '4G',
       onlineMode: service.server?.onlineMode ?? true,
       maxPlayers: service.server?.maxPlayers ?? 20,
+      spawnProtection: service.server?.spawnProtection ?? 16,
     },
     operators: service.operators ?? [],
     backup: service.backup ?? { enabled: true, interval: '*/30 * * * *', mode: 'append', limit: 5 },

@@ -5,7 +5,8 @@ locals {
   cfg_minecraft_version        = var.minecraft_version
   cfg_minecraft_memory         = var.minecraft_memory
   cfg_minecraft_online_mode    = var.minecraft_online_mode
-  cfg_minecraft_max_players    = var.minecraft_max_players
+  cfg_minecraft_max_players      = var.minecraft_max_players
+  cfg_minecraft_spawn_protection = var.minecraft_spawn_protection
   cfg_minecraft_seed           = var.minecraft_seed
   cfg_minecraft_difficulty     = var.minecraft_difficulty
   cfg_minecraft_mode           = var.minecraft_mode

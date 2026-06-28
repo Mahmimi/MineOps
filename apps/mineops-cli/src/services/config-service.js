@@ -57,6 +57,7 @@ export class ConfigService {
       ['minecraft.type', config.minecraft?.type, value('TYPE')],
       ['server.memory', config.server?.memory, value('MEMORY')],
       ['server.maxPlayers', String(config.server?.maxPlayers), value('MAX_PLAYERS')],
+      ['server.spawnProtection', String(config.server?.spawnProtection), value('SPAWN_PROTECTION')],
       ['world.seed', String(config.world?.seed), value('SEED')],
       ['world.difficulty', config.world?.difficulty, value('DIFFICULTY')],
       ['world.mode', config.world?.mode, value('MODE')],
@@ -66,13 +67,14 @@ export class ConfigService {
   worldMetadataWarnings(instance) {
     const config = this.parse(instance);
     const names = resourceNamesFor(instance);
-    const result = this.runner.run('kubectl', ['exec', '-n', instance.namespace, `deployment/${names.minecraftDeployment}`, '--', 'sh', '-lc', 'test -f /data/world/level.dat && echo level.dat-present; test -f /data/server.properties && grep -E "^(level-seed|difficulty|gamemode)=" /data/server.properties || true'], { capture: true, allowFailure: true });
+    const result = this.runner.run('kubectl', ['exec', '-n', instance.namespace, `deployment/${names.minecraftDeployment}`, '--', 'sh', '-lc', 'test -f /data/world/level.dat && echo level.dat-present; test -f /data/server.properties && grep -E "^(level-seed|difficulty|gamemode|spawn-protection)=" /data/server.properties || true'], { capture: true, allowFailure: true });
     if (result.status !== 0) return ['Minecraft world metadata is not readable yet.'];
     const warnings = [];
     if (!result.stdout.includes('level.dat-present')) warnings.push('world/level.dat was not found in the running world.');
     const properties = Object.fromEntries(result.stdout.split(/\r?\n/).filter((line) => line.includes('=')).map((line) => line.split('=')));
     if (properties.difficulty && properties.difficulty !== config.world?.difficulty) warnings.push(`world difficulty differs from config: ${properties.difficulty} != ${config.world.difficulty}`);
     if (properties.gamemode && properties.gamemode !== config.world?.mode) warnings.push(`world mode differs from config: ${properties.gamemode} != ${config.world.mode}`);
+    if (properties['spawn-protection'] && properties['spawn-protection'] !== String(config.server?.spawnProtection)) warnings.push(`spawn protection differs from config: ${properties['spawn-protection']} != ${config.server.spawnProtection}`);
     return warnings;
   }
 }

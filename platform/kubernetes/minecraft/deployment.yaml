@@ -76,6 +76,8 @@ spec:
               value: "Jiranuwat"
             - name: OVERRIDE_SERVER_PROPERTIES
               value: "true"
+            - name: SPAWN_PROTECTION
+              value: "0"
           volumeMounts:
             - name: minecraft-data
               mountPath: /data
